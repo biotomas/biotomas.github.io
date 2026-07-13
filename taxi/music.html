@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Modern Synth Music Generator</title>
+  <style>
+    body {
+      background: #181824;
+      color: #e0e0f0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+    }
+    h1 { margin-bottom: 8px; font-weight: 600; letter-spacing: 1px; }
+    p { color: #8a8aa3; margin-top: 0; margin-bottom: 24px; }
+    button {
+      background: #6c5ce7;
+      color: #fff;
+      border: none;
+      padding: 16px 36px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      border-radius: 30px;
+      cursor: pointer;
+      box-shadow: 0 8px 20px rgba(108, 92, 231, 0.3);
+      transition: all 0.2s ease;
+    }
+    button:hover { background: #5b4cc4; transform: translateY(-2px); }
+    button:active { transform: translateY(1px); }
+    .status { margin-top: 24px; font-size: 0.95rem; color: #a0a0b8; }
+  </style>
+</head>
+<body>
+
+  <h1>SYNTH FLOW GENERATOR</h1>
+  <p>Non-gamey, smooth electronic music generator</p>
+  <button id="toggleBtn">START MUSIC</button>
+  <div class="status" id="status">Status: Stopped</div>
+
+  <script>
+    let audioCtx = null;
+    let isPlaying = false;
+    let timerId = null;
+
+    const BPM = 120;
+    const SECONDS_PER_16TH = (60 / BPM) / 4;
+
+    const m2f = m => 440 * Math.pow(2, (m - 69) / 12);
+
+    // Smooth C Major / A Minor Pentatonic (Bright & Clean, No Jazz)
+    const MELODY_SCALE = [60, 62, 64, 67, 69, 72, 74, 76, 79, 81]; // C4 to A5
+
+    // Pop / Modern Progression: C - G - Am - F (I - V - vi - IV)
+    const PROGRESSION = [
+      { root: 36, chord: [60, 64, 67] }, // C
+      { root: 43, chord: [59, 62, 67] }, // G
+      { root: 45, chord: [60, 64, 69] }, // Am
+      { root: 41, chord: [60, 65, 69] }  // F
+    ];
+
+    let step = 0;
+    let lastMelodyNote = 72;
+
+    // --- SYNTH VOICE (Warm Filtered Sawtooth/Sine - No Chiptune) ---
+    function playSynthNote(freq, type, duration, startTime, vol, cutoff = 1200) {
+      if (!freq) return;
+
+      const osc = audioCtx.createOscillator();
+      const filter = audioCtx.createBiquadFilter();
+      const gain = audioCtx.createGain();
+
+      osc.type = type; // 'sawtooth' or 'sine' for warm modern synth tones
+      osc.frequency.value = freq;
+
+      // Low-pass filter removes the harsh "chiptune" high frequencies
+      filter.type = "lowpass";
+      filter.frequency.setValueAtTime(cutoff, startTime);
+      filter.Q.value = 2;
+
+      // Smooth Attack/Decay Envelope (Unlike abrupt NES sounds)
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(vol, startTime + 0.02); // 20ms attack
+      gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      osc.start(startTime);
+      osc.stop(startTime + duration);
+    }
+
+    // Soft kick/snare using filtered sine + noise
+    function playDrum(type, startTime) {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+
+      if (type === 'kick') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(120, startTime);
+        osc.frequency.exponentialRampToValueAtTime(30, startTime + 0.1);
+
+        gain.gain.setValueAtTime(0.3, startTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.15);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(startTime);
+        osc.stop(startTime + 0.15);
+      }
+    }
+
+    // --- GENERATIVE LOGIC ---
+    function scheduleStep() {
+      const now = audioCtx.currentTime;
+      const bar = Math.floor(step / 16);
+      const sub = step % 16;
+      const currentChordObj = PROGRESSION[bar % PROGRESSION.length];
+
+      // 1. Kick Drum (Steady 4-on-the-floor beat)
+      if (sub % 4 === 0) {
+        playDrum('kick', now);
+      }
+
+      // 2. Synth Bass (Warm Sine/Saw - Beat 1 & 3)
+      if (sub === 0 || sub === 8) {
+        playSynthNote(m2f(currentChordObj.root), 'sawtooth', SECONDS_PER_16TH * 6, now, 0.15, 400);
+      }
+
+      // 3. Arpeggiator (Flowing background chord notes)
+      if (sub % 2 === 0) {
+        const arpIdx = (sub / 2) % currentChordObj.chord.length;
+        const arpNote = currentChordObj.chord[arpIdx];
+        playSynthNote(m2f(arpNote), 'sine', SECONDS_PER_16TH * 2, now, 0.05, 1800);
+      }
+
+      // 4. Clean Melody (Pentatonic jumps, smooth motion)
+      if (Math.random() < 0.6) {
+        const roll = Math.random();
+        let nextNote;
+
+        if (roll < 0.7) {
+          // Smooth step in pentatonic scale
+          const idx = MELODY_SCALE.indexOf(lastMelodyNote);
+          const dir = Math.random() > 0.5 ? 1 : -1;
+          const nextIdx = Math.max(0, Math.min(MELODY_SCALE.length - 1, idx + dir));
+          nextNote = MELODY_SCALE[nextIdx];
+        } else {
+          // Jump to a chord tone
+          nextNote = currentChordObj.chord[Math.floor(Math.random() * currentChordObj.chord.length)];
+        }
+
+        lastMelodyNote = nextNote;
+        playSynthNote(m2f(nextNote), 'sawtooth', SECONDS_PER_16TH * 3, now, 0.08, 1500);
+      }
+
+      step = (step + 1) % 64;
+    }
+
+    // --- CONTROLS ---
+    const toggleBtn = document.getElementById('toggleBtn');
+    const statusEl = document.getElementById('status');
+
+    toggleBtn.addEventListener('click', () => {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+
+      if (isPlaying) {
+        clearInterval(timerId);
+        isPlaying = false;
+        toggleBtn.textContent = 'START MUSIC';
+        statusEl.textContent = 'Status: Stopped';
+      } else {
+        audioCtx.resume();
+        isPlaying = true;
+        toggleBtn.textContent = 'PAUSE MUSIC';
+        statusEl.textContent = 'Status: Playing Synth Flow...';
+        timerId = setInterval(scheduleStep, SECONDS_PER_16TH * 1000);
+      }
+    });
+  </script>
+</body>
+</html>

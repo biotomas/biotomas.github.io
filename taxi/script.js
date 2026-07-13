@@ -141,7 +141,8 @@ startBtn.addEventListener('click', () => {
     gameStarted = true;
     isGameOver = false;
     uiOverlay.style.display = 'none';
-    if (!audioStarted && !isMuted) playMusic();
+    audioStarted = true;
+    if (!isMuted) playMusic();
 });
 
 restartBtn.addEventListener('click', () => {
@@ -234,10 +235,12 @@ function playJumpSound() {
     playTone(500, 'square', 0.2, 0.1, audioCtx.currentTime + 0.1);
 }
 
+// Move sound
 function playMoveSound() {
     playTone(150, 'sine', 0.1, 0.1);
 }
 
+// Crash sound
 function playCrashSound() {
     // Noise-like sound for crash
     const bufferSize = audioCtx.sampleRate * 0.5;
@@ -253,42 +256,238 @@ function playCrashSound() {
     noise.start();
 }
 
-// Background Music System
+// --- 8-BIT JAZZ MUSIC GENERATOR ---
+
+// MIDI to Frequency conversion
+const m2f = m => 440 * Math.pow(2, (m - 69) / 12);
+
+// C Dorian Scale (C, D, Eb, F, G, A, Bb) across 2 octaves
+const LEAD_SCALE = [60, 62, 63, 65, 67, 69, 70, 72, 74, 75, 77, 79, 81, 82];
+
+// Harmony: ii - V - i progression in C Minor
+const CHORDS = [
+  { name: "Dm7b5", root: 38, tones: [62, 65, 68, 72] }, // D, F, Ab, C
+  { name: "G7alt", root: 43, tones: [62, 65, 68, 71] }, // G, B, F, Ab
+  { name: "Cm7",   root: 36, tones: [60, 63, 67, 70] }, // C, Eb, G, Bb
+  { name: "Cm7",   root: 36, tones: [60, 63, 67, 70] }
+];
+
+let currentStep = 0; // 0 to 63 (4 bars of 16th notes)
+let currentLeadNote = 72; // Start on C5
+let isPlaying = false;
 let musicTimeout = null;
-const scale = [130.81, 155.56, 174.61, 196.00, 233.08]; // C minor pentatonic
+
+// --- SYNTHESIS HELPERS ---
+
+// 8-Bit Chiptune Synth Voice (Square/Triangle)
+function playChiptuneNote(freq, type, duration, startTime, vol = 0.1) {
+  if (isMuted || !freq) return;
+  
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+
+  osc.type = type; // 'square' for lead/chords, 'triangle' for bass
+  osc.frequency.value = freq;
+
+  // Snappy 8-bit envelope
+  gain.gain.setValueAtTime(vol, startTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  osc.start(startTime);
+  osc.stop(startTime + duration);
+}
+
+// 8-Bit Noise Drum (White Noise)
+function playNoiseDrum(duration, startTime, isSnare = false, volumeMultiplier = 1.0) {
+  if (isMuted) return;
+  const bufferSize = audioCtx.sampleRate * duration;
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = Math.random() * 2 - 1; // Pure noise
+  }
+
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = buffer;
+
+  const gain = audioCtx.createGain();
+  const vol = (isSnare ? 0.08 : 0.02) * volumeMultiplier;
+  gain.gain.setValueAtTime(vol, startTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+
+  noise.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  noise.start(startTime);
+}
+
+// 8-Bit Kick Drum Synth
+function playKickDrum(duration, startTime, vol = 0.3) {
+  if (isMuted) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(150, startTime);
+  osc.frequency.exponentialRampToValueAtTime(40, startTime + duration);
+  
+  gain.gain.setValueAtTime(vol, startTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+  
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  
+  osc.start(startTime);
+  osc.stop(startTime + duration);
+}
+
+// --- GENERATIVE ALGORITHMS ---
+
+// Walking Bass Line Algorithm
+function getBassNote(barStep, chord) {
+  const beat = Math.floor(barStep / 4); // 0, 1, 2, 3
+  const sub = barStep % 4;
+  if (sub !== 0) return null; // Play quarter notes
+
+  if (beat === 0) return chord.root; // Beat 1: Root
+  if (beat === 1) return chord.root + 3; // Beat 2: Minor 3rd
+  if (beat === 2) return chord.root + 7; // Beat 3: 5th
+  if (beat === 3) return chord.root + 11; // Beat 4: Chromatic passing note
+  return chord.root;
+}
+
+// Jazz Solo Improvisation Markov/Probability
+function getNextLeadNote(chordTones) {
+  const roll = Math.random();
+
+  if (roll < 0.25) {
+    return null; // Rest (Jazz needs space!)
+  } else if (roll < 0.60) {
+    // Stepwise motion along Dorian scale
+    const currIdx = LEAD_SCALE.indexOf(currentLeadNote);
+    const step = Math.random() > 0.5 ? 1 : -1;
+    const newIdx = Math.max(0, Math.min(LEAD_SCALE.length - 1, currIdx + step));
+    return LEAD_SCALE[newIdx];
+  } else if (roll < 0.85) {
+    // Jump to a Chord Tone
+    return chordTones[Math.floor(Math.random() * chordTones.length)];
+  } else {
+    // Chromatic approach (1 semitone shift)
+    return currentLeadNote + (Math.random() > 0.5 ? 1 : -1);
+  }
+}
+
+// --- ADAPTIVE MUSIC CONTROLLER ---
 
 function getIntensity() {
-    return Math.min(1, score / 5000); // Normalize score to 0-1 range
+    return Math.min(1, score / 5000); // Normalize score to 0-1 range (reaches max around ~83 seconds)
+}
+
+function scheduleNextStep() {
+    if (!isPlaying) return;
+
+    // Recalculate dynamic musical parameters based on intensity
+    const intensity = getIntensity();
+    
+    // BPM scales up from 110 to 155 for heightened urgency
+    const bpm = 110 + (intensity * 45);
+    const secondsPer16th = (60 / bpm) / 4;
+    
+    // Swing delay scales with tempo
+    const swing = 0.06 * (110 / bpm);
+    
+    const currentTime = audioCtx.currentTime;
+    const bar = Math.floor(currentStep / 16);
+    const barStep = currentStep % 16;
+    const chord = CHORDS[bar % CHORDS.length];
+
+    // Calculate Swing timing for off-beats
+    const isOffBeat = currentStep % 2 !== 0;
+    const time = currentTime + (isOffBeat ? swing : 0);
+
+    // 1. DRUMS (Kick, Snare, Hi-hat)
+    // Hi-hat intensity-dependent behavior:
+    // Low intensity: hi-hat on quarter beats (0, 4, 8, 12)
+    // High intensity: hi-hat on eighth notes (every even step) for drive
+    const playHihat = (barStep % 4 === 0) || (intensity > 0.4 && barStep % 2 === 0);
+    if (playHihat) {
+        const volMult = (barStep % 4 === 0) ? 1.0 : 0.6;
+        playNoiseDrum(0.03, time, false, volMult);
+    }
+
+    // Snare on 2 and 4 (step 4 and 12)
+    if (barStep === 4 || barStep === 12) {
+        playNoiseDrum(0.08, time, true);
+    } else if (intensity > 0.75 && (barStep === 14 || barStep === 15) && Math.random() < 0.5) {
+        // High intensity snare fill / ghost notes
+        playNoiseDrum(0.04, time, true, 0.4);
+    }
+
+    // Kick Drum: standard downbeat + syncopated upbeat at higher intensity
+    const playKick = (barStep === 0 || barStep === 8) || (intensity > 0.5 && (barStep === 6 || barStep === 14));
+    if (playKick) {
+        playKickDrum(0.12, time, 0.25 + intensity * 0.1);
+    }
+
+    // 2. WALKING BASS (Triangle Wave)
+    const bassMidi = getBassNote(barStep, chord);
+    if (bassMidi) {
+        playChiptuneNote(m2f(bassMidi), 'triangle', secondsPer16th * 3.5, time, 0.2);
+    }
+
+    // 3. SYNCOPATED CHORDS (Square Wave)
+    // Stabs on beat 1 and off-beat of 3
+    if (barStep === 0 || barStep === 10) {
+        const chordVol = 0.03 + intensity * 0.015;
+        const chordDuration = secondsPer16th * (intensity > 0.6 ? 1.5 : 2.5);
+        chord.tones.forEach(tone => {
+            playChiptuneNote(m2f(tone - 12), 'square', chordDuration, time, chordVol);
+        });
+    }
+
+    // 4. IMPROVISED LEAD SOLO (Square Wave)
+    // Lead density scales from 50% up to 90%
+    const leadProbability = 0.5 + intensity * 0.4;
+    if (Math.random() < leadProbability) {
+        const newNote = getNextLeadNote(chord.tones);
+        if (newNote) {
+            currentLeadNote = newNote;
+            
+            // At high intensity, pitch can jump up an octave for a frantic climax
+            let leadMidi = currentLeadNote;
+            if (intensity > 0.6 && Math.random() < (intensity - 0.5)) {
+                leadMidi += 12; // Octave up
+            }
+            
+            const leadVol = 0.07 + intensity * 0.03;
+            const leadDuration = secondsPer16th * (Math.random() > 0.7 ? 2.5 : 1.2);
+            playChiptuneNote(m2f(leadMidi), 'square', leadDuration, time, leadVol);
+        }
+    }
+
+    // Progress current step
+    currentStep = (currentStep + 1) % 64;
+
+    // Schedule next 16th note step
+    musicTimeout = setTimeout(scheduleNextStep, secondsPer16th * 1000);
 }
 
 function playMusic() {
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-    if (musicTimeout) return;
-
-    function loop() {
-        if (isMuted) {
-            musicTimeout = setTimeout(loop, 500);
-            return;
-        }
-
-        const intensity = getIntensity();
-        const tempo = 250 - (intensity * 100);
-        
-        // Beat (Kick)
-        playTone(50, 'sine', 0.1, 0.3);
-        
-        // Procedural Melody
-        if (Math.random() < 0.5 + (intensity * 0.5)) {
-            const freq = scale[Math.floor(Math.random() * scale.length)];
-            playTone(freq * (Math.random() < 0.3 ? 2 : 1), 'sawtooth', 0.3, 0.05);
-        }
-
-        musicTimeout = setTimeout(loop, tempo);
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
     }
-    loop();
+    if (isPlaying) return;
+    isPlaying = true;
+    currentStep = 0;
+    scheduleNextStep();
 }
 
 function stopMusic() {
+    isPlaying = false;
     if (musicTimeout) {
         clearTimeout(musicTimeout);
         musicTimeout = null;
@@ -298,22 +497,12 @@ function stopMusic() {
 // Start audio on first interaction
 window.addEventListener('keydown', () => {
     if (!audioStarted && !isMuted) {
-        playMusic();
         audioStarted = true;
+        if (gameStarted && !isGameOver) {
+            playMusic();
+        }
     }
 }, { once: true });
-
-document.getElementById("muteBtn").addEventListener("click", () => {
-    isMuted = !isMuted;
-    if (isMuted) {
-        stopMusic();
-        document.getElementById("muteBtn").innerText = "Unmute Music";
-    } else {
-        if (!audioStarted) audioStarted = true;
-        playMusic();
-        document.getElementById("muteBtn").innerText = "Mute Music";
-    }
-});
 
 // Obstacles
 const obstacles = [];
