@@ -613,6 +613,17 @@ function animate() {
     } else {
         player.position.y = playerRoadOffset.y;
     }
+
+    // Rotate player to align with road curve (looking ahead towards z = -2)
+    const playerTargetZ = -2;
+    const playerTargetOffset = getRoadOffset(playerTargetZ, distanceTraveled);
+    const dx = playerTargetOffset.x - playerRoadOffset.x;
+    const dy = playerTargetOffset.y - playerRoadOffset.y;
+    player.lookAt(
+        player.position.x + dx,
+        player.position.y + dy,
+        playerTargetZ
+    );
     
     // Smooth camera follow
     camera.position.x += (player.position.x - camera.position.x) * 0.1;
