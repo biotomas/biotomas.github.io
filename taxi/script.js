@@ -160,6 +160,7 @@ const lanes = [-3.33, 0, 3.33];
 let currentLaneIndex = 1;
 let targetLaneX = lanes[1];
 let playerLaneX = lanes[1]; // Tracks the smooth lane position without road curve lag
+let isPaused = false; // Tracks whether the game is currently paused
 let isJumping = false;
 let jumpTime = 0;
 const jumpDuration = 30;
@@ -212,7 +213,24 @@ document.getElementById("muteBtn").addEventListener("click", toggleMute);
 
 window.addEventListener("keydown", (event) => {
     if (event.key === "m" || event.key === "M") toggleMute();
-    if (isGameOver) return;
+    
+    // Handle Pause/Unpause
+    if (gameStarted && !isGameOver) {
+        if (event.key === "ArrowDown" && !isPaused) {
+            isPaused = true;
+            stopMusic();
+            document.getElementById("pause-overlay").style.display = 'flex';
+            return;
+        }
+        if (event.key === "ArrowUp" && isPaused) {
+            isPaused = false;
+            if (!isMuted) playMusic();
+            document.getElementById("pause-overlay").style.display = 'none';
+            return;
+        }
+    }
+    
+    if (isGameOver || isPaused) return;
     if (event.key === "ArrowLeft") handleMove('left');
     else if (event.key === "PageUp") speed += 5;
     else if (event.key === "PageDown") speed -= 5;
@@ -569,7 +587,7 @@ const fpsElement = document.getElementById("fps");
 function animate() {
     requestAnimationFrame(animate);
 
-    if (isGameOver || !gameStarted) return;
+    if (isGameOver || !gameStarted || isPaused) return;
 
     // Score update
     score++;
