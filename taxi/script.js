@@ -159,6 +159,7 @@ scene.add(player);
 const lanes = [-3.33, 0, 3.33];
 let currentLaneIndex = 1;
 let targetLaneX = lanes[1];
+let playerLaneX = lanes[1]; // Tracks the smooth lane position without road curve lag
 let isJumping = false;
 let jumpTime = 0;
 const jumpDuration = 30;
@@ -596,9 +597,9 @@ function animate() {
     // Get current road offset at player position (z=0)
     const playerRoadOffset = getRoadOffset(0, distanceTraveled);
 
-    // Smooth lane switching, relative to the road curve
-    const targetX = targetLaneX + playerRoadOffset.x;
-    player.position.x += (targetX - player.position.x) * 0.2;
+    // Smooth lane switching, separating the lane offset from the road curve
+    playerLaneX += (targetLaneX - playerLaneX) * 0.2;
+    player.position.x = playerLaneX + playerRoadOffset.x;
     
     // Animate road texture based on speed
     roadTexture.offset.y += speed * 0.00001;
@@ -625,9 +626,9 @@ function animate() {
         playerTargetZ
     );
     
-    // Smooth camera follow
-    camera.position.x += (player.position.x - camera.position.x) * 0.1;
-    camera.position.y += (player.position.y + 4.5 - camera.position.y) * 0.1;
+    // Fixed camera follow directly behind the car
+    camera.position.x = player.position.x;
+    camera.position.y = player.position.y + 4.5;
     camera.position.z = player.position.z + 10; // maintain distance
     camera.lookAt(player.position.x, player.position.y + 1, player.position.z - 15);
     
