@@ -70,7 +70,10 @@ let distanceTraveled = 0;
 function getRoadOffset(z, dist = 0) {
     const evalZ = z - dist;
     if (evalZ > -100) return { x: 0, y: 0 }; // Keep first 100 units straight and flat
-    const blend = Math.min(1, (-evalZ - 100) / 100); // smooth 100-unit transition
+    
+    // Apply a Smoothstep (Hermite) interpolation for perfect easing
+    const t = Math.max(0, Math.min(1, (-evalZ - 100) / 100)); // Normalize 0 to 1
+    const blend = t * t * (3 - 2 * t); // Smoothstep formula
 
     // Horizontal curve (X) and Vertical hill (Y)
     const x = (Math.sin(evalZ * 0.015) * 25 + Math.cos(evalZ * 0.007) * 15) * blend;
