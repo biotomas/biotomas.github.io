@@ -166,9 +166,13 @@ let jumpTime = 0;
 const jumpDuration = 30;
 
 let score = 0;
+let highScore = parseInt(localStorage.getItem('sunset_taxi_high_score')) || 0; // Load local top score
 let speed = 300;
 let isGameOver = true; // Start paused
 let gameStarted = false;
+
+// Display initial high score
+document.getElementById('high-score-display').innerText = `Top Score: ${Math.floor(highScore / 10)}`;
 const scoreElement = document.getElementById("score");
 const uiOverlay = document.getElementById("ui-overlay");
 const startBtn = document.getElementById("startBtn");
@@ -686,6 +690,29 @@ function animate() {
             isGameOver = true;
             playCrashSound();
             stopMusic();
+            
+            const finalScore = Math.floor(score / 10);
+            const oldHighScore = Math.floor(highScore / 10);
+            let msg = "";
+            
+            if (finalScore > oldHighScore) {
+                highScore = score;
+                localStorage.setItem('sunset_taxi_high_score', score);
+                msg = `<span style="font-size: 24px; color: #FFD700; font-weight: bold; display: block; margin-bottom: 10px;">🎉 NEW TOP SCORE! 🎉</span>` +
+                      `You crushed the record with a score of <strong style="color: #FFD700; font-size: 20px;">${finalScore}</strong>!<br>` +
+                      `Previous top score was ${oldHighScore}.`;
+                // Update start screen display for future runs
+                document.getElementById('high-score-display').innerText = `Top Score: ${finalScore}`;
+            } else {
+                msg = `<span style="font-size: 24px; color: #FF4500; font-weight: bold; display: block; margin-bottom: 10px;">💥 CRASHED! 💥</span>` +
+                      `Your Score: <strong style="color: #FF4500; font-size: 20px;">${finalScore}</strong><br>` +
+                      `Current Top Score: ${oldHighScore}`;
+            }
+            
+            // Set dynamic message, hide instructions, and show restart
+            document.getElementById("game-over-message").innerHTML = msg;
+            document.getElementById("instructions-text").style.display = 'none';
+            
             uiOverlay.style.display = 'flex';
             startBtn.style.display = 'none';
             restartBtn.style.display = 'block';
