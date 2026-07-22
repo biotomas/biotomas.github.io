@@ -64,34 +64,39 @@ const light = new THREE.DirectionalLight(0xFF4500, 1);
 light.position.set(0, 5, -20); // Sun low on horizon
 scene.add(light);
 
+let distanceTraveled = 0;
+
 // Deterministic 3D road curve function
-function getRoadOffset(z) {
-    if (z > -20) return { x: 0, y: 0 }; // Keep start straight and flat
-    const blend = Math.min(1, (-z - 20) / 50); // smooth transition
+function getRoadOffset(z, dist = 0) {
+    const evalZ = z - dist;
+    if (evalZ > -20) return { x: 0, y: 0 }; // Keep start straight and flat
+    const blend = Math.min(1, (-evalZ - 20) / 50); // smooth transition
     
     // Horizontal curve (X) and Vertical hill (Y)
-    const x = (Math.sin(z * 0.01) * 25 + Math.cos(z * 0.005) * 15) * blend;
-    const y = (Math.sin(z * 0.015) * 8) * blend;
+    const x = (Math.sin(evalZ * 0.015) * 25 + Math.cos(evalZ * 0.007) * 15) * blend;
+    const y = (Math.sin(evalZ * 0.02) * 8) * blend;
     return { x, y };
 }
 
-function deformGeometry(geometry) {
+function deformGeometry(geometry, originalPositions, dist = 0) {
     const position = geometry.attributes.position;
     for (let i = 0; i < position.count; i++) {
-        const geomY = position.getY(i);
+        const geomY = originalPositions.getY(i);
         const worldZ = -geomY; // maps due to rotation
-        const offset = getRoadOffset(worldZ);
+        const offset = getRoadOffset(worldZ, dist);
         
-        position.setX(i, position.getX(i) + offset.x);
-        position.setZ(i, position.getZ(i) + offset.y); // geometry Z is world Y after rotation
+        position.setX(i, originalPositions.getX(i) + offset.x);
+        position.setZ(i, originalPositions.getZ(i) + offset.y); // geometry Z is world Y after rotation
     }
+    position.needsUpdate = true;
     geometry.computeVertexNormals();
 }
 
 // Road & Grass
 const roadTexture = createRoadTexture();
-const roadGeometry = new THREE.PlaneGeometry(10, 1000, 1, 100);
-deformGeometry(roadGeometry);
+const roadGeometry = new THREE.PlaneGeometry(10, 1000, 1, 300);
+const originalRoadPositions = roadGeometry.attributes.position.clone();
+deformGeometry(roadGeometry, originalRoadPositions, 0);
 
 const road = new THREE.Mesh(
     roadGeometry,
@@ -100,8 +105,9 @@ const road = new THREE.Mesh(
 road.rotation.x = -Math.PI / 2;
 scene.add(road);
 
-const grassGeometry = new THREE.PlaneGeometry(200, 1000, 10, 100);
-deformGeometry(grassGeometry);
+const grassGeometry = new THREE.PlaneGeometry(200, 1000, 10, 300);
+const originalGrassPositions = grassGeometry.attributes.position.clone();
+deformGeometry(grassGeometry, originalGrassPositions, 0);
 
 const grass = new THREE.Mesh(
     grassGeometry,
@@ -146,7 +152,7 @@ function createLowPolyCar(color) {
 
 // Player
 const player = createLowPolyCar(0xffff00);
-player.position.set(0, 0.5, 0);
+player.position.set(0, 0, 0);
 scene.add(player);
 
 // Game state
@@ -541,7 +547,7 @@ function spawnObstacle() {
     const obstacle = createLowPolyCar(Math.random() * 0xffffff);
     obstacle.lane = lane; // Store lane index
     
-    const offset = getRoadOffset(-120);
+    const offset = getRoadOffset(-120, distanceTraveled);
     obstacle.position.set(lanes[lane] + offset.x, 0.5 + offset.y, -120);
     scene.add(obstacle);
     obstacles.push(obstacle);
@@ -581,38 +587,59 @@ function animate() {
     }
 
     // Smooth lane switching
-    player.position.x += (targetLaneX - player.position.x) * 0.2;
+    distanceTraveled += speed * 0.002;
+
+    // Dynamically deform geometries based on current distance traveled
+    deformGeometry(roadGeometry, originalRoadPositions, distanceTraveled);
+    deformGeometry(grassGeometry, originalGrassPositions, distanceTraveled);
+
+    // Get current road offset at player position (z=0)
+    const playerRoadOffset = getRoadOffset(0, distanceTraveled);
+
+    // Smooth lane switching, relative to the road curve
+    const targetX = targetLaneX + playerRoadOffset.x;
+    player.position.x += (targetX - player.position.x) * 0.2;
     
     // Animate road texture based on speed
     roadTexture.offset.y += speed * 0.00001;
     
+    // Jump logic relative to current road height (no +0.5 offset)
     if (isJumping) {
         jumpTime++;
         const h = 3; const d = jumpDuration;
-        player.position.y = 0.5 + (-4 * h / (d * d) * (jumpTime * jumpTime) + (4 * h / d) * jumpTime);
-        if (jumpTime >= jumpDuration) { isJumping = false; player.position.y = 0.5; }
+        const jumpHeight = (-4 * h / (d * d) * (jumpTime * jumpTime) + (4 * h / d) * jumpTime);
+        player.position.y = playerRoadOffset.y + jumpHeight;
+        if (jumpTime >= jumpDuration) { isJumping = false; player.position.y = playerRoadOffset.y; }
+    } else {
+        player.position.y = playerRoadOffset.y;
     }
+    
+    // Smooth camera follow
+    camera.position.x += (player.position.x - camera.position.x) * 0.1;
+    camera.position.y += (player.position.y + 4.5 - camera.position.y) * 0.1;
+    camera.position.z = player.position.z + 10; // maintain distance
+    camera.lookAt(player.position.x, player.position.y + 1, player.position.z - 15);
     
     obstacles.forEach((obstacle, index) => {
         obstacle.position.z += speed * 0.002; 
         
-        // Update X and Y to follow the road curve
-        const offset = getRoadOffset(obstacle.position.z);
+        // Update X and Y to follow the road curve (relative to distanceTraveled)
+        const offset = getRoadOffset(obstacle.position.z, distanceTraveled);
         obstacle.position.x = lanes[obstacle.lane] + offset.x;
-        obstacle.position.y = 0.5 + offset.y;
+        obstacle.position.y = offset.y; // Wheels touch the road
         
         // Rotate obstacle to face along the curve (towards the player)
         const targetZ = obstacle.position.z + 2;
-        const targetOffset = getRoadOffset(targetZ);
+        const targetOffset = getRoadOffset(targetZ, distanceTraveled);
         obstacle.lookAt(
             lanes[obstacle.lane] + targetOffset.x,
-            0.5 + targetOffset.y,
+            targetOffset.y, // Wheels touch the road
             targetZ
         );
         
         if (Math.abs(obstacle.position.x - player.position.x) < 1 &&
             Math.abs(obstacle.position.z - player.position.z) < 1 &&
-            player.position.y < 1) {
+            player.position.y < playerRoadOffset.y + 0.5) {
             isGameOver = true;
             playCrashSound();
             stopMusic();
