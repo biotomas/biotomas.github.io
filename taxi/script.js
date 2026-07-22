@@ -64,17 +64,47 @@ const light = new THREE.DirectionalLight(0xFF4500, 1);
 light.position.set(0, 5, -20); // Sun low on horizon
 scene.add(light);
 
+// Deterministic 3D road curve function
+function getRoadOffset(z) {
+    if (z > -20) return { x: 0, y: 0 }; // Keep start straight and flat
+    const blend = Math.min(1, (-z - 20) / 50); // smooth transition
+    
+    // Horizontal curve (X) and Vertical hill (Y)
+    const x = (Math.sin(z * 0.01) * 25 + Math.cos(z * 0.005) * 15) * blend;
+    const y = (Math.sin(z * 0.015) * 8) * blend;
+    return { x, y };
+}
+
+function deformGeometry(geometry) {
+    const position = geometry.attributes.position;
+    for (let i = 0; i < position.count; i++) {
+        const geomY = position.getY(i);
+        const worldZ = -geomY; // maps due to rotation
+        const offset = getRoadOffset(worldZ);
+        
+        position.setX(i, position.getX(i) + offset.x);
+        position.setZ(i, position.getZ(i) + offset.y); // geometry Z is world Y after rotation
+    }
+    geometry.computeVertexNormals();
+}
+
 // Road & Grass
 const roadTexture = createRoadTexture();
+const roadGeometry = new THREE.PlaneGeometry(10, 1000, 1, 100);
+deformGeometry(roadGeometry);
+
 const road = new THREE.Mesh(
-    new THREE.PlaneGeometry(10, 1000),
+    roadGeometry,
     new THREE.MeshStandardMaterial({ map: roadTexture })
 );
 road.rotation.x = -Math.PI / 2;
 scene.add(road);
 
+const grassGeometry = new THREE.PlaneGeometry(200, 1000, 10, 100);
+deformGeometry(grassGeometry);
+
 const grass = new THREE.Mesh(
-    new THREE.PlaneGeometry(100, 1000),
+    grassGeometry,
     new THREE.MeshStandardMaterial({ map: createGrassTexture() })
 );
 grass.rotation.x = -Math.PI / 2;
@@ -509,7 +539,10 @@ const obstacles = [];
 function spawnObstacle() {
     const lane = Math.floor(Math.random() * 3);
     const obstacle = createLowPolyCar(Math.random() * 0xffffff);
-    obstacle.position.set(lanes[lane], 0.5, -120);
+    obstacle.lane = lane; // Store lane index
+    
+    const offset = getRoadOffset(-120);
+    obstacle.position.set(lanes[lane] + offset.x, 0.5 + offset.y, -120);
     scene.add(obstacle);
     obstacles.push(obstacle);
 
@@ -562,6 +595,20 @@ function animate() {
     
     obstacles.forEach((obstacle, index) => {
         obstacle.position.z += speed * 0.002; 
+        
+        // Update X and Y to follow the road curve
+        const offset = getRoadOffset(obstacle.position.z);
+        obstacle.position.x = lanes[obstacle.lane] + offset.x;
+        obstacle.position.y = 0.5 + offset.y;
+        
+        // Rotate obstacle to face along the curve (towards the player)
+        const targetZ = obstacle.position.z + 2;
+        const targetOffset = getRoadOffset(targetZ);
+        obstacle.lookAt(
+            lanes[obstacle.lane] + targetOffset.x,
+            0.5 + targetOffset.y,
+            targetZ
+        );
         
         if (Math.abs(obstacle.position.x - player.position.x) < 1 &&
             Math.abs(obstacle.position.z - player.position.z) < 1 &&
