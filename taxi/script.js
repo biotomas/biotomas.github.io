@@ -626,11 +626,24 @@ function animate() {
         playerTargetZ
     );
     
-    // Fixed camera follow directly behind the car
-    camera.position.x = player.position.x;
-    camera.position.y = player.position.y + 4.5;
-    camera.position.z = player.position.z + 10; // maintain distance
-    camera.lookAt(player.position.x, player.position.y + 1, player.position.z - 15);
+    // Calculate normalized direction vector for the car
+    const dz = playerTargetZ - player.position.z; // which is -2
+    const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const dirX = dx / len;
+    const dirY = dy / len;
+    const dirZ = dz / len;
+
+    // Position camera on a fixed 'stick' behind the car (10 units back, 4.5 units up)
+    camera.position.x = player.position.x - dirX * 10;
+    camera.position.y = player.position.y - dirY * 10 + 4.5;
+    camera.position.z = player.position.z - dirZ * 10;
+    
+    // Point the camera ahead of the car along its facing direction
+    camera.lookAt(
+        player.position.x + dirX * 15,
+        player.position.y + dirY * 15 + 1, // Look slightly down to keep car in view
+        player.position.z + dirZ * 15
+    );
     
     obstacles.forEach((obstacle, index) => {
         obstacle.position.z += speed * 0.002; 
