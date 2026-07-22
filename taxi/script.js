@@ -509,7 +509,7 @@ const obstacles = [];
 function spawnObstacle() {
     const lane = Math.floor(Math.random() * 3);
     const obstacle = createLowPolyCar(Math.random() * 0xffffff);
-    obstacle.position.set(lanes[lane], 0.5, -50);
+    obstacle.position.set(lanes[lane], 0.5, -120);
     scene.add(obstacle);
     obstacles.push(obstacle);
 
