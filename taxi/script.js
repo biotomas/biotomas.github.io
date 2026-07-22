@@ -41,8 +41,8 @@ function createGrassTexture() {
 
 // Camera
 const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
-camera.position.set(0, 5, 10);
-camera.lookAt(0, 0, -10);
+camera.position.set(0, 4.5, 10); // Match stick-behind-car height and distance
+camera.lookAt(0, 1, -15); // Look ahead in the center lane
 
 // Renderer
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -69,15 +69,14 @@ let distanceTraveled = 0;
 // Deterministic 3D road curve function
 function getRoadOffset(z, dist = 0) {
     const evalZ = z - dist;
-    if (evalZ > -20) return { x: 0, y: 0 }; // Keep start straight and flat
-    const blend = Math.min(1, (-evalZ - 20) / 50); // smooth transition
-    
+    if (evalZ > -100) return { x: 0, y: 0 }; // Keep first 100 units straight and flat
+    const blend = Math.min(1, (-evalZ - 100) / 100); // smooth 100-unit transition
+
     // Horizontal curve (X) and Vertical hill (Y)
     const x = (Math.sin(evalZ * 0.015) * 25 + Math.cos(evalZ * 0.007) * 15) * blend;
     const y = (Math.sin(evalZ * 0.02) * 8) * blend;
     return { x, y };
 }
-
 function deformGeometry(geometry, originalPositions, dist = 0) {
     const position = geometry.attributes.position;
     for (let i = 0; i < position.count; i++) {
