@@ -194,8 +194,8 @@ restartBtn.addEventListener('click', () => {
 });
 
 function handleMove(direction) {
-    if (direction === 'left' && currentLaneIndex > 0) { currentLaneIndex--; playMoveSound(); }
-    else if (direction === 'right' && currentLaneIndex < lanes.length - 1) { currentLaneIndex++; playMoveSound(); }
+    if (direction === 'left' && currentLaneIndex > 0) { currentLaneIndex--; }
+    else if (direction === 'right' && currentLaneIndex < lanes.length - 1) { currentLaneIndex++; }
     targetLaneX = lanes[currentLaneIndex];
 }
 
@@ -297,9 +297,7 @@ function playJumpSound() {
 }
 
 // Move sound
-function playMoveSound() {
-    playTone(150, 'sine', 0.1, 0.1);
-}
+// (Removed)
 
 // Crash sound
 function playCrashSound() {
@@ -317,24 +315,15 @@ function playCrashSound() {
     noise.start();
 }
 
-// --- 8-BIT JAZZ MUSIC GENERATOR ---
+// --- DEEP INDUSTRIAL TECHNO GENERATOR ---
 
 // MIDI to Frequency conversion
 const m2f = m => 440 * Math.pow(2, (m - 69) / 12);
 
-// C Dorian Scale (C, D, Eb, F, G, A, Bb) across 2 octaves
-const LEAD_SCALE = [60, 62, 63, 65, 67, 69, 70, 72, 74, 75, 77, 79, 81, 82];
-
-// Harmony: ii - V - i progression in C Minor
-const CHORDS = [
-  { name: "Dm7b5", root: 38, tones: [62, 65, 68, 72] }, // D, F, Ab, C
-  { name: "G7alt", root: 43, tones: [62, 65, 68, 71] }, // G, B, F, Ab
-  { name: "Cm7",   root: 36, tones: [60, 63, 67, 70] }, // C, Eb, G, Bb
-  { name: "Cm7",   root: 36, tones: [60, 63, 67, 70] }
-];
+// Dissonant Minor Scale for industrial texture
+const TECHNO_SCALE = [36, 37, 39, 42, 43, 48, 49, 51];
 
 let currentStep = 0; // 0 to 63 (4 bars of 16th notes)
-let currentLeadNote = 72; // Start on C5
 let isPlaying = false;
 let musicTimeout = null;
 
@@ -393,8 +382,8 @@ function playKickDrum(duration, startTime, vol = 0.3) {
   const gain = audioCtx.createGain();
   
   osc.type = 'sine';
-  osc.frequency.setValueAtTime(150, startTime);
-  osc.frequency.exponentialRampToValueAtTime(40, startTime + duration);
+  osc.frequency.setValueAtTime(120, startTime);
+  osc.frequency.exponentialRampToValueAtTime(30, startTime + duration);
   
   gain.gain.setValueAtTime(vol, startTime);
   gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
@@ -406,128 +395,59 @@ function playKickDrum(duration, startTime, vol = 0.3) {
   osc.stop(startTime + duration);
 }
 
-// --- GENERATIVE ALGORITHMS ---
-
-// Walking Bass Line Algorithm
-function getBassNote(barStep, chord) {
-  const beat = Math.floor(barStep / 4); // 0, 1, 2, 3
-  const sub = barStep % 4;
-  if (sub !== 0) return null; // Play quarter notes
-
-  if (beat === 0) return chord.root; // Beat 1: Root
-  if (beat === 1) return chord.root + 3; // Beat 2: Minor 3rd
-  if (beat === 2) return chord.root + 7; // Beat 3: 5th
-  if (beat === 3) return chord.root + 11; // Beat 4: Chromatic passing note
-  return chord.root;
-}
-
-// Jazz Solo Improvisation Markov/Probability
-function getNextLeadNote(chordTones) {
-  const roll = Math.random();
-
-  if (roll < 0.25) {
-    return null; // Rest (Jazz needs space!)
-  } else if (roll < 0.60) {
-    // Stepwise motion along Dorian scale
-    const currIdx = LEAD_SCALE.indexOf(currentLeadNote);
-    const step = Math.random() > 0.5 ? 1 : -1;
-    const newIdx = Math.max(0, Math.min(LEAD_SCALE.length - 1, currIdx + step));
-    return LEAD_SCALE[newIdx];
-  } else if (roll < 0.85) {
-    // Jump to a Chord Tone
-    return chordTones[Math.floor(Math.random() * chordTones.length)];
-  } else {
-    // Chromatic approach (1 semitone shift)
-    return currentLeadNote + (Math.random() > 0.5 ? 1 : -1);
-  }
-}
-
 // --- ADAPTIVE MUSIC CONTROLLER ---
 
 function getIntensity() {
-    return Math.min(1, score / 5000); // Normalize score to 0-1 range (reaches max around ~83 seconds)
+    return Math.min(1, score / 5000); // Normalize score to 0-1 range
 }
+
+// Recurring 4-bar Motif (64 steps)
+// 1 = hit, 0 = rest
+const MOTIF = [
+  1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0,
+  1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0,
+  1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 1, 1, 1,
+  1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0
+];
 
 function scheduleNextStep() {
     if (!isPlaying) return;
 
-    // Recalculate dynamic musical parameters based on intensity
     const intensity = getIntensity();
     
-    // BPM scales up from 110 to 155 for heightened urgency
-    const bpm = 110 + (intensity * 45);
+    // Industrial Techno BPM: 125-140
+    const bpm = 125 + (intensity * 15);
     const secondsPer16th = (60 / bpm) / 4;
     
-    // Swing delay scales with tempo
-    const swing = 0.06 * (110 / bpm);
-    
     const currentTime = audioCtx.currentTime;
-    const bar = Math.floor(currentStep / 16);
     const barStep = currentStep % 16;
-    const chord = CHORDS[bar % CHORDS.length];
 
-    // Calculate Swing timing for off-beats
-    const isOffBeat = currentStep % 2 !== 0;
-    const time = currentTime + (isOffBeat ? swing : 0);
-
-    // 1. DRUMS (Kick, Snare, Hi-hat)
-    // Hi-hat intensity-dependent behavior:
-    // Low intensity: hi-hat on quarter beats (0, 4, 8, 12)
-    // High intensity: hi-hat on eighth notes (every even step) for drive
-    const playHihat = (barStep % 4 === 0) || (intensity > 0.4 && barStep % 2 === 0);
-    if (playHihat) {
-        const volMult = (barStep % 4 === 0) ? 1.0 : 0.6;
-        playNoiseDrum(0.03, time, false, volMult);
+    // 1. DRUMS (4/4 Kick + Persistent Hats)
+    // Driving Kick
+    if (barStep % 4 === 0) {
+        playKickDrum(0.15, currentTime, 0.4 + intensity * 0.2);
+    }
+    
+    // Constant Hats
+    if (barStep % 2 !== 0) {
+        playNoiseDrum(0.02, currentTime, false, 0.3 + intensity * 0.2);
     }
 
-    // Snare on 2 and 4 (step 4 and 12)
+    // Snare/Clap on 2 and 4
     if (barStep === 4 || barStep === 12) {
-        playNoiseDrum(0.08, time, true);
-    } else if (intensity > 0.75 && (barStep === 14 || barStep === 15) && Math.random() < 0.5) {
-        // High intensity snare fill / ghost notes
-        playNoiseDrum(0.04, time, true, 0.4);
+        playNoiseDrum(0.05, currentTime, true, 0.5 + intensity * 0.3);
     }
 
-    // Kick Drum: standard downbeat + syncopated upbeat at higher intensity
-    const playKick = (barStep === 0 || barStep === 8) || (intensity > 0.5 && (barStep === 6 || barStep === 14));
-    if (playKick) {
-        playKickDrum(0.12, time, 0.25 + intensity * 0.1);
-    }
+    // 2. INDUSTRIAL BASS (Pulse)
+    // Driving bassline - Root/5th loop
+    const bassMidi = (barStep % 8 < 4) ? TECHNO_SCALE[0] : TECHNO_SCALE[4];
+    playChiptuneNote(m2f(bassMidi - 36), 'triangle', secondsPer16th * 1.5, currentTime, 0.25 + intensity * 0.15);
 
-    // 2. WALKING BASS (Triangle Wave)
-    const bassMidi = getBassNote(barStep, chord);
-    if (bassMidi) {
-        playChiptuneNote(m2f(bassMidi), 'triangle', secondsPer16th * 3.5, time, 0.2);
-    }
-
-    // 3. SYNCOPATED CHORDS (Square Wave)
-    // Stabs on beat 1 and off-beat of 3
-    if (barStep === 0 || barStep === 10) {
-        const chordVol = 0.03 + intensity * 0.015;
-        const chordDuration = secondsPer16th * (intensity > 0.6 ? 1.5 : 2.5);
-        chord.tones.forEach(tone => {
-            playChiptuneNote(m2f(tone - 12), 'square', chordDuration, time, chordVol);
-        });
-    }
-
-    // 4. IMPROVISED LEAD SOLO (Square Wave)
-    // Lead density scales from 50% up to 90%
-    const leadProbability = 0.5 + intensity * 0.4;
-    if (Math.random() < leadProbability) {
-        const newNote = getNextLeadNote(chord.tones);
-        if (newNote) {
-            currentLeadNote = newNote;
-            
-            // At high intensity, pitch can jump up an octave for a frantic climax
-            let leadMidi = currentLeadNote;
-            if (intensity > 0.6 && Math.random() < (intensity - 0.5)) {
-                leadMidi += 12; // Octave up
-            }
-            
-            const leadVol = 0.07 + intensity * 0.03;
-            const leadDuration = secondsPer16th * (Math.random() > 0.7 ? 2.5 : 1.2);
-            playChiptuneNote(m2f(leadMidi), 'square', leadDuration, time, leadVol);
-        }
+    // 3. THEMATIC MELODIC MOTIF
+    // Only play if motif bit is 1
+    if (MOTIF[currentStep] === 1) {
+        const motifNote = TECHNO_SCALE[currentStep % 4] + 12; // Simple loop
+        playChiptuneNote(m2f(motifNote), 'square', secondsPer16th * 0.5, currentTime, 0.08 + intensity * 0.05);
     }
 
     // Progress current step
