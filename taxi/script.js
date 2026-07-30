@@ -96,7 +96,7 @@ function deformGeometry(geometry, originalPositions, dist = 0) {
 
 // Road & Grass
 const roadTexture = createRoadTexture();
-const roadGeometry = new THREE.PlaneGeometry(10, 1000, 1, 300);
+const roadGeometry = new THREE.PlaneGeometry(10, 1000, 1, 1000);
 const originalRoadPositions = roadGeometry.attributes.position.clone();
 deformGeometry(roadGeometry, originalRoadPositions, 0);
 
@@ -107,7 +107,7 @@ const road = new THREE.Mesh(
 road.rotation.x = -Math.PI / 2;
 scene.add(road);
 
-const grassGeometry = new THREE.PlaneGeometry(200, 1000, 10, 300);
+const grassGeometry = new THREE.PlaneGeometry(200, 1000, 10, 1000);
 const originalGrassPositions = grassGeometry.attributes.position.clone();
 deformGeometry(grassGeometry, originalGrassPositions, 0);
 
@@ -180,13 +180,18 @@ const uiOverlay = document.getElementById("ui-overlay");
 const startBtn = document.getElementById("startBtn");
 const restartBtn = document.getElementById("restartBtn");
 
-// UI Events
-startBtn.addEventListener('click', () => {
+function start() {
     gameStarted = true;
     isGameOver = false;
     uiOverlay.style.display = 'none';
     audioStarted = true;
     if (!isMuted) playMusic();
+
+}
+
+// UI Events
+startBtn.addEventListener('click', () => {
+    start()
 });
 
 restartBtn.addEventListener('click', () => {
@@ -206,12 +211,11 @@ function handleJump() {
 // Audio management
 function toggleMute() {
     isMuted = !isMuted;
+    localStorage.setItem('sunset_taxi_muted', isMuted);
     if (isMuted) {
         stopMusic();
-        document.getElementById("muteBtn").innerText = "Unmute Music";
     } else {
         if (gameStarted && !isGameOver) playMusic();
-        document.getElementById("muteBtn").innerText = "Mute Music";
     }
 }
 
@@ -219,6 +223,8 @@ document.getElementById("muteBtn").addEventListener("click", toggleMute);
 
 window.addEventListener("keydown", (event) => {
     if (event.key === "m" || event.key === "M") toggleMute();
+    if (event.key === "r" || event.key === "R") location.reload();
+    if (event.key === "s" || event.key === "S") start();
     
     // Handle Pause/Unpause
     if (gameStarted && !isGameOver) {
@@ -271,7 +277,7 @@ window.addEventListener('touchend', (e) => {
 });
 
 // Audio
-let isMuted = false;
+let isMuted = localStorage.getItem('sunset_taxi_muted') === 'true';
 let audioStarted = false;
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
@@ -301,6 +307,7 @@ function playJumpSound() {
 
 // Crash sound
 function playCrashSound() {
+    if (isMuted) return;
     // Noise-like sound for crash
     const bufferSize = audioCtx.sampleRate * 0.5;
     const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
@@ -398,7 +405,7 @@ function playKickDrum(duration, startTime, vol = 0.3) {
 // --- ADAPTIVE MUSIC CONTROLLER ---
 
 function getIntensity() {
-    return Math.min(1, score / 5000); // Normalize score to 0-1 range
+    return Math.min(1, score / 10000); // Normalize score to 0-1 range
 }
 
 // Recurring 4-bar Motif (64 steps)
@@ -487,22 +494,47 @@ window.addEventListener('keydown', () => {
 
 // Obstacles
 const obstacles = [];
-function spawnObstacle() {
-    const lane = Math.floor(Math.random() * 3);
-    const obstacle = createLowPolyCar(Math.random() * 0xffffff);
-    obstacle.lane = lane; // Store lane index
-    
-    const offset = getRoadOffset(-120, distanceTraveled);
-    obstacle.position.set(lanes[lane] + offset.x, 0.5 + offset.y, -120);
-    scene.add(obstacle);
-    obstacles.push(obstacle);
+let nextObstacleDistance = 50;
 
-    // Increase density: reduce interval as score increases
-    const minInterval = 200;
-    const currentInterval = Math.max(minInterval, 1000 - score / 10);
-    setTimeout(spawnObstacle, currentInterval);
+function spawnRow() {
+    const intensity = getIntensity(); // 0-1
+    
+    // Probabilities depend on intensity (0 to 1)
+    let p0 = 0.4 - 0.3 * intensity;
+    let p1 = 0.3;
+    let p2 = 0.2 + 0.1 * intensity;
+    let p3 = 0.1 + 0.1 * intensity;
+    
+    // Normalize probabilities
+    const total = p0 + p1 + p2 + p3;
+    p0 /= total;
+    p1 = p1 / total + p0;
+    p2 = p2 / total + p1;
+    p3 = p3 / total + p2;
+    
+    const roll = Math.random();
+    let numCars = 0;
+    if (roll < p0) numCars = 0;
+    else if (roll < p1) numCars = 1;
+    else if (roll < p2) numCars = 2;
+    else numCars = 3;
+    
+    // Choose lanes
+    let availableLanes = [0, 1, 2];
+    for(let i=0; i<numCars; i++) {
+        const laneIndex = Math.floor(Math.random() * availableLanes.length);
+        const lane = availableLanes.splice(laneIndex, 1)[0];
+        
+        // Spawn car in this lane
+        const obstacle = createLowPolyCar(Math.random() * 0xffffff);
+        obstacle.lane = lane;
+        
+        const offset = getRoadOffset(-120, distanceTraveled);
+        obstacle.position.set(lanes[lane] + offset.x, 0.5 + offset.y, -120);
+        scene.add(obstacle);
+        obstacles.push(obstacle);
+    }
 }
-spawnObstacle();
 
 // FPS counter variables
 let lastTime = performance.now();
@@ -520,7 +552,7 @@ function animate() {
     if (score % 60 === 0) {
         console.log("Score:", Math.floor(score/10));
     }
-    scoreElement.innerText = `Score: ${Math.floor(score/10)} Speed: ${speed}`;
+    scoreElement.innerText = `Score: ${Math.floor(score/10)} Intensoty: ${Number(getIntensity()).toFixed(2)}`;
 
     // FPS calculation
     frames++;
@@ -533,6 +565,11 @@ function animate() {
 
     // Smooth lane switching
     distanceTraveled += speed * 0.002;
+    
+    if (distanceTraveled >= nextObstacleDistance) {
+        spawnRow();
+        nextObstacleDistance += 10 + (10 * (1-getIntensity()));
+    }
 
     // Dynamically deform geometries based on current distance traveled
     deformGeometry(roadGeometry, originalRoadPositions, distanceTraveled);
@@ -589,7 +626,9 @@ function animate() {
         player.position.z + dirZ * 15
     );
     
-    obstacles.forEach((obstacle, index) => {
+    // Use backward iteration for safe removal
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+        const obstacle = obstacles[i];
         obstacle.position.z += speed * 0.002; 
         
         // Update X and Y to follow the road curve (relative to distanceTraveled)
@@ -641,8 +680,8 @@ function animate() {
             console.log("Game Over!");
         }
         
-        if (obstacle.position.z > 10) { scene.remove(obstacle); obstacles.splice(index, 1); }
-    });
+        if (obstacle.position.z > 10) { scene.remove(obstacle); obstacles.splice(i, 1); }
+    }
     
     renderer.render(scene, camera);
 }
