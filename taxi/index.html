@@ -10,7 +10,10 @@
     <div id="game-container"></div>
     <div id="ui-overlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20; background: rgba(0,0,0,0.5); color: white; font-family: monospace; text-align: center;">
         <h1 style="margin-bottom: 5px; font-size: 36px; letter-spacing: 2px;">SUNSET TAXI</h1>
-        <div id="high-score-display" style="margin-bottom: 15px; font-size: 18px; color: #FFD700; font-weight: bold; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);">Top Score: 0</div>
+        <div id="leaderboard" style="margin-bottom: 15px; font-size: 16px; color: #FFD700; font-weight: bold; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);">
+            <h3>Top 10 Scores</h3>
+            <ol id="high-score-list" style="padding-left: 20px;"></ol>
+        </div>
         
         <p id="instructions-text" style="margin-bottom: 25px; max-width: 450px; font-size: 16px; line-height: 1.6; background: rgba(0,0,0,0.3); padding: 20px; border-radius: 8px;">
             Avoid the cars as long as you can!<br><br>

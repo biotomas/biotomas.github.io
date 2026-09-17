@@ -168,13 +168,23 @@ let jumpTime = 0;
 const jumpDuration = 30;
 
 let score = 0;
-let highScore = parseInt(localStorage.getItem('sunset_taxi_high_score')) || 0; // Load local top score
 let speed = 300;
-let isGameOver = true; // Start paused
+let isGameOver = true;
 let gameStarted = false;
+let topScores = JSON.parse(localStorage.getItem('sunset_taxi_top_scores')) || [];
 
-// Display initial high score
-document.getElementById('high-score-display').innerText = `Top Score: ${Math.floor(highScore / 10)}`;
+function updateLeaderboardDisplay() {
+    const list = document.getElementById('high-score-list');
+    list.innerHTML = '';
+    topScores.forEach(s => {
+        const li = document.createElement('li');
+        li.innerText = Math.floor(s / 10);
+        list.appendChild(li);
+    });
+}
+
+// Display initial leaderboard
+updateLeaderboardDisplay();
 const scoreElement = document.getElementById("score");
 const uiOverlay = document.getElementById("ui-overlay");
 const startBtn = document.getElementById("startBtn");
@@ -653,21 +663,26 @@ function animate() {
             stopMusic();
             
             const finalScore = Math.floor(score / 10);
-            const oldHighScore = Math.floor(highScore / 10);
+            
+            // Add to top scores if applicable
+            let isNewHighScore = false;
+            if (topScores.length < 10 || score > topScores[topScores.length - 1]) {
+                topScores.push(score);
+                topScores.sort((a, b) => b - a);
+                if (topScores.length > 10) topScores.pop();
+                localStorage.setItem('sunset_taxi_top_scores', JSON.stringify(topScores));
+                updateLeaderboardDisplay();
+                isNewHighScore = true;
+            }
+            
             let msg = "";
             
-            if (finalScore > oldHighScore) {
-                highScore = score;
-                localStorage.setItem('sunset_taxi_high_score', score);
-                msg = `<span style="font-size: 24px; color: #FFD700; font-weight: bold; display: block; margin-bottom: 10px;">🎉 NEW TOP SCORE! 🎉</span>` +
-                      `You crushed the record with a score of <strong style="color: #FFD700; font-size: 20px;">${finalScore}</strong>!<br>` +
-                      `Previous top score was ${oldHighScore}.`;
-                // Update start screen display for future runs
-                document.getElementById('high-score-display').innerText = `Top Score: ${finalScore}`;
+            if (isNewHighScore) {
+                msg = `<span style="font-size: 24px; color: #FFD700; font-weight: bold; display: block; margin-bottom: 10px;">🎉 NEW HIGH SCORE! 🎉</span>` +
+                      `You made the leaderboard with a score of <strong style="color: #FFD700; font-size: 20px;">${finalScore}</strong>!`;
             } else {
                 msg = `<span style="font-size: 24px; color: #FF4500; font-weight: bold; display: block; margin-bottom: 10px;">💥 CRASHED! 💥</span>` +
-                      `Your Score: <strong style="color: #FF4500; font-size: 20px;">${finalScore}</strong><br>` +
-                      `Current Top Score: ${oldHighScore}`;
+                      `Your Score: <strong style="color: #FF4500; font-size: 20px;">${finalScore}</strong>`;
             }
             
             // Set dynamic message, hide instructions, and show restart
