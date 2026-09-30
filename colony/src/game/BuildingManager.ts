@@ -97,13 +97,24 @@ export class BuildingManager {
         }
     }
 
+    private groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+
     private getTerrainIntersect() {
         this.raycaster.setFromCamera(this.mouse, this.camera);
-        // Intersect only with the terrain mesh
+        
+        // Try mesh raycasting first
         const intersects = this.raycaster.intersectObject(this.terrain.getMesh());
         if (intersects.length > 0) {
             return intersects[0];
         }
+
+        // Fallback: Plane intersection for when the mouse is slightly off the mesh 
+        // but still over the intended grid area
+        const intersectPoint = new THREE.Vector3();
+        if (this.raycaster.ray.intersectPlane(this.groundPlane, intersectPoint)) {
+            return { point: intersectPoint };
+        }
+
         return null;
     }
 
