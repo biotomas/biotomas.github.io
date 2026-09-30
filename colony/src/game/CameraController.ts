@@ -105,12 +105,24 @@ export class CameraController {
         if (this.keys.has('KeyS')) { this.lat -= speed; moved = true; }
         if (this.keys.has('KeyA')) { this.lon -= speed; moved = true; }
         if (this.keys.has('KeyD')) { this.lon += speed; moved = true; }
+        
+        if (this.keys.has('KeyR')) {
+            this.resetCamera();
+            moved = true;
+        }
 
         if (moved) {
             // Clamp latitude to avoid flipping at poles
             this.lat = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, this.lat));
             this.updateCameraPosition();
         }
+    }
+
+    public resetCamera() {
+        this.pitch = 0;
+        this.yaw = 0;
+        this.camera.up.set(0, 1, 0);
+        this.updateCameraPosition();
     }
 
     public initKeyboard() {
