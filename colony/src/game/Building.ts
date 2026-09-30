@@ -125,7 +125,7 @@ export class Building extends THREE.Group {
         w1.position.set(0, 0.6, 0.4);
         this.add(w1);
 
-        const light = new THREE.PointLight(0x88ccff, 1.5, 8);
+        const light = new THREE.PointLight(0x88ccff, 4.5, 12);
         light.position.y = 1.0;
         this.add(light);
     }
