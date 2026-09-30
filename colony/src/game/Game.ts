@@ -25,6 +25,8 @@ export class Game {
         
         this.renderer = new THREE.WebGLRenderer({ antialias: true });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         document.body.appendChild(this.renderer.domElement);
 
         // Sun & Light Simulator
@@ -42,7 +44,7 @@ export class Game {
 
         // UI Manager
         this.uiManager = new UIManager(this.buildingManager);
-        this.uiManager.setResourceManager(this.resourceManager);
+        this.uiManager.setManagers(this.resourceManager, this.sunSimulator);
 
         // Camera Controller
         this.cameraController = new CameraController(this.camera, this.renderer.domElement);

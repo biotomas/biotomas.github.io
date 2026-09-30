@@ -28,6 +28,8 @@ export class Building extends THREE.Group {
         const bodyMat = new THREE.MeshPhongMaterial({ color: 0x3366ff });
         const body = new THREE.Mesh(bodyGeo, bodyMat);
         body.position.y = 0.4;
+        body.castShadow = true;
+        body.receiveShadow = true;
         this.add(body);
 
         // Terminals
@@ -36,10 +38,14 @@ export class Building extends THREE.Group {
         
         const t1 = new THREE.Mesh(termGeo, termMat);
         t1.position.set(0.15, 0.85, 0);
+        t1.castShadow = true;
+        t1.receiveShadow = true;
         this.add(t1);
 
         const t2 = new THREE.Mesh(termGeo, termMat);
         t2.position.set(-0.15, 0.85, 0);
+        t2.castShadow = true;
+        t2.receiveShadow = true;
         this.add(t2);
     }
 
@@ -49,6 +55,8 @@ export class Building extends THREE.Group {
         const standMat = new THREE.MeshPhongMaterial({ color: 0x666666 });
         const stand = new THREE.Mesh(standGeo, standMat);
         stand.position.y = 0.15;
+        stand.castShadow = true;
+        stand.receiveShadow = true;
         this.add(stand);
 
         // Panel
@@ -57,6 +65,8 @@ export class Building extends THREE.Group {
         const panel = new THREE.Mesh(panelGeo, panelMat);
         panel.position.y = 0.4;
         panel.rotation.x = Math.PI / 6; // Angled towards "sun"
+        panel.castShadow = true;
+        panel.receiveShadow = true;
         this.add(panel);
     }
 }

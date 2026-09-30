@@ -1,12 +1,14 @@
 import { BuildingType } from './game/Building';
 import { BuildingManager } from './game/BuildingManager';
 import { ResourceManager } from './game/ResourceManager';
+import { SunSimulator } from './game/SunSimulator';
 
 export class UIManager {
     private menuContainer: HTMLElement;
     private statusContainer: HTMLElement;
     private buildingManager: BuildingManager;
     private resourceManager: ResourceManager | null = null;
+    private sunSimulator: SunSimulator | null = null;
 
     constructor(buildingManager: BuildingManager) {
         this.buildingManager = buildingManager;
@@ -25,8 +27,9 @@ export class UIManager {
         document.body.appendChild(this.statusContainer);
     }
 
-    public setResourceManager(resourceManager: ResourceManager) {
+    public setManagers(resourceManager: ResourceManager, sunSimulator: SunSimulator) {
         this.resourceManager = resourceManager;
+        this.sunSimulator = sunSimulator;
     }
 
     private applyStyles() {
@@ -56,7 +59,7 @@ export class UIManager {
             borderRadius: '4px',
             border: '1px solid #444',
             zIndex: '100',
-            minWidth: '250px'
+            minWidth: '350px'
         });
 
         // Add CSS for buttons globally
@@ -107,13 +110,14 @@ export class UIManager {
     }
 
     private createStatus() {
-        this.statusContainer.innerHTML = 'Energy Production: 0 units';
+        this.statusContainer.innerHTML = 'Time: 00:00 | Energy: 0 units';
     }
 
     public update() {
-        if (this.resourceManager) {
+        if (this.resourceManager && this.sunSimulator) {
             const prod = Math.round(this.resourceManager.currentEnergyProduction);
-            this.statusContainer.innerHTML = `Energy Production: ${prod} units`;
+            const time = this.sunSimulator.getFormattedTime();
+            this.statusContainer.innerHTML = `Time: ${time} | Energy Production: ${prod} units`;
         }
     }
 }

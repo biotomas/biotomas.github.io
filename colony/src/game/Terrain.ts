@@ -23,6 +23,7 @@ export class Terrain extends THREE.Group {
         });
 
         this.mesh = new THREE.Mesh(geometry, material);
+        this.mesh.receiveShadow = true;
         this.add(this.mesh);
 
         const wireframe = new THREE.LineSegments(
