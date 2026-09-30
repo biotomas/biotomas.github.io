@@ -69,24 +69,17 @@ export class BuildingManager {
             if (faceInfo) {
                 const { center, id, vA, vB, vC } = faceInfo;
 
-                const localVA = vA.clone();
-                const localVB = vB.clone();
-                const localVC = vC.clone();
-                this.placementGroup.worldToLocal(localVA);
-                this.placementGroup.worldToLocal(localVB);
-                this.placementGroup.worldToLocal(localVC);
-
-                this.tileHighlight.updateTriangle(localVA, localVB, localVC);
+                // faceInfo returns vertices in LOCAL space of the terrain mesh.
+                // Since placementGroup is the parent of both mesh and highlight, 
+                // we use them directly.
+                this.tileHighlight.updateTriangle(vA, vB, vC);
                 this.tileHighlight.setVisible(true);
 
                 if (this.previewBuilding) {
-                    const localCenter = center.clone();
-                    this.placementGroup.worldToLocal(localCenter);
-                    
-                    const localNormal = localCenter.clone().normalize();
                     const isOccupied = this.occupiedTiles.has(id);
+                    const localNormal = center.clone().normalize();
                     
-                    this.previewBuilding.position.copy(localCenter);
+                    this.previewBuilding.position.copy(center);
                     this.previewBuilding.alignToNormal(localNormal);
                     this.previewBuilding.visible = true;
                     this.setPreviewMaterial(this.previewBuilding, isOccupied ? 0xff0000 : 0x00ff00);
@@ -120,7 +113,6 @@ export class BuildingManager {
     private placeBuilding(type: BuildingType, faceInfo: any) {
         const building = new Building(type);
         const localPos = faceInfo.center.clone();
-        this.placementGroup.worldToLocal(localPos);
         const localNormal = localPos.clone().normalize();
 
         building.position.copy(localPos);

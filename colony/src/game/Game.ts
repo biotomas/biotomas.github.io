@@ -85,6 +85,7 @@ this.buildingManager.placementGroup = this.asteroidGroup;
         const progress = elapsed / this.rotationDuration;
         const rotationY = progress * Math.PI * 2;
         this.asteroidGroup.rotation.y = rotationY;
+        this.asteroidGroup.updateMatrixWorld(); // Force update for raycasting precision
 
         this.sunSimulator.update();
         this.skybox.update();
