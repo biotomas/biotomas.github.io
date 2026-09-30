@@ -2,62 +2,130 @@ import * as THREE from 'three';
 
 export class Terrain extends THREE.Group {
     private readonly radius: number = 20;
-    private readonly detail: number = 5; // Much finer grid (3 -> 5)
+    private readonly detail: number = 5; 
     private mesh: THREE.Mesh;
+
+    // Deterministic random craters
+    private craters: { pos: THREE.Vector3, radius: number, depth: number }[] = [];
 
     constructor() {
         super();
         
-        // 1. Create a highly subdivided icosahedron
-        // detail 5 gives a very smooth and fine grid
+        // Generate crater data
+        this.generateCraters();
+
         const geometry = new THREE.IcosahedronGeometry(this.radius, this.detail);
         
+        // Apply craters and colors
+        this.applyProceduralDetail(geometry);
+
         const material = new THREE.MeshPhongMaterial({
-            color: 0x777777,
-            flatShading: true, // Flat shading makes individual triangles visible
+            flatShading: true,
+            vertexColors: true, // Enable vertex colors for "dust"
         });
 
         this.mesh = new THREE.Mesh(geometry, material);
         this.mesh.receiveShadow = true;
         this.add(this.mesh);
 
-        // Subdued wireframe for grid visibility
         const wireframe = new THREE.LineSegments(
             new THREE.WireframeGeometry(geometry),
-            new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.05 })
+            new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.03 })
         );
         this.add(wireframe);
+    }
+
+    private generateCraters() {
+        const count = 40;
+        for (let i = 0; i < count; i++) {
+            const pos = new THREE.Vector3(
+                Math.random() - 0.5,
+                Math.random() - 0.5,
+                Math.random() - 0.5
+            ).normalize();
+            
+            this.craters.push({
+                pos,
+                radius: 1.0 + Math.random() * 4.0,
+                depth: 0.3 + Math.random() * 0.7
+            });
+        }
+    }
+
+    private applyProceduralDetail(geometry: THREE.BufferGeometry) {
+        const posAttr = geometry.attributes.position;
+        const colors: number[] = [];
+        
+        const v = new THREE.Vector3();
+        for (let i = 0; i < posAttr.count; i++) {
+            v.fromBufferAttribute(posAttr, i);
+            const dir = v.clone().normalize();
+            
+            // 1. Calculate Crater Displacement
+            let displacement = 0;
+            for (const crater of this.craters) {
+                const dist = v.distanceTo(crater.pos.clone().multiplyScalar(this.radius));
+                if (dist < crater.radius) {
+                    // Simple crater profile: depression + rim
+                    const x = dist / crater.radius; // 0 to 1
+                    // Crater shape function (smoothstep-like)
+                    // Deep in center, raised rim at edges
+                    const craterShape = -Math.cos(x * Math.PI) * 0.5 + 0.5; // inverted bell
+                    const rimShape = Math.sin(x * Math.PI) * 0.2;
+                    
+                    displacement -= craterShape * crater.depth;
+                    displacement += rimShape * (crater.depth * 0.5);
+                }
+            }
+
+            // 2. Add some high-frequency noise for "rocky" feel
+            const noise = (Math.sin(v.x * 2) * Math.cos(v.y * 2) * Math.sin(v.z * 2)) * 0.1;
+            displacement += noise;
+
+            const finalRadius = this.radius + displacement;
+            posAttr.setXYZ(i, dir.x * finalRadius, dir.y * finalRadius, dir.z * finalRadius);
+
+            // 3. Vertex Colors (Dust/Rock)
+            // Base gray
+            const baseColor = new THREE.Color(0x777777);
+            // Random dust patches
+            const d = (Math.sin(v.x * 0.5) + Math.sin(v.y * 0.5) + Math.sin(v.z * 0.5)) / 3;
+            if (d > 0.2) baseColor.lerp(new THREE.Color(0x999988), 0.3); // Lighter dust
+            if (d < -0.2) baseColor.lerp(new THREE.Color(0x555555), 0.2); // Darker patches
+            
+            // Highlight crater rims or floors
+            if (displacement < -0.2) baseColor.lerp(new THREE.Color(0x444444), 0.4);
+            
+            colors.push(baseColor.r, baseColor.g, baseColor.b);
+        }
+
+        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+        geometry.computeVertexNormals();
     }
 
     public getMesh(): THREE.Mesh {
         return this.mesh;
     }
 
-    /**
-     * Given an intersection from a raycaster, find the triangle's info.
-     */
     public getFaceInfo(intersect: THREE.Intersection) {
         if (!intersect.face) return null;
 
         const geometry = this.mesh.geometry;
         const pos = geometry.attributes.position;
         
-        // Vertices of the triangle
         const vA = new THREE.Vector3().fromBufferAttribute(pos, intersect.face.a);
         const vB = new THREE.Vector3().fromBufferAttribute(pos, intersect.face.b);
         const vC = new THREE.Vector3().fromBufferAttribute(pos, intersect.face.c);
 
-        // Center of the triangle (centroid)
         const center = new THREE.Vector3()
             .add(vA).add(vB).add(vC)
             .divideScalar(3);
 
-        // Normal of the triangle
-        const normal = intersect.face.normal.clone();
-
-        // Unique ID for the face based on its vertices (sorted to ensure consistency)
         const indices = [intersect.face.a, intersect.face.b, intersect.face.c].sort((a, b) => a - b);
         const id = indices.join(',');
+
+        // Return a slightly normalized surface normal for building alignment
+        const normal = center.clone().normalize();
 
         return { center, normal, id, vA, vB, vC };
     }
