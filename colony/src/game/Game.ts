@@ -6,6 +6,7 @@ import { SunSimulator } from './SunSimulator';
 import { ResourceManager } from './ResourceManager';
 import { UIManager } from '../UIManager';
 import { Skybox } from './Skybox';
+import { Building, BuildingType } from './Building';
 
 export class Game {
     private scene: THREE.Scene;
@@ -48,7 +49,19 @@ export class Game {
 
         this.terrain = new Terrain();
         this.asteroidGroup.add(this.terrain);
-// Building Manager
+
+        // Polar Lighthouses
+        const northLighthouse = new Building(BuildingType.LIGHTHOUSE);
+        northLighthouse.position.set(0, this.terrain.getRadiusAt(), 0);
+        northLighthouse.alignToNormal(new THREE.Vector3(0, 1, 0));
+        this.asteroidGroup.add(northLighthouse);
+
+        const southLighthouse = new Building(BuildingType.LIGHTHOUSE);
+        southLighthouse.position.set(0, -this.terrain.getRadiusAt(), 0);
+        southLighthouse.alignToNormal(new THREE.Vector3(0, -1, 0));
+        this.asteroidGroup.add(southLighthouse);
+
+        // Building Manager
 this.buildingManager = new BuildingManager(this.scene, this.camera, this.terrain);
 this.buildingManager.initEvents();
 this.buildingManager.placementGroup = this.asteroidGroup;

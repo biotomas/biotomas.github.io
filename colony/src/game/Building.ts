@@ -2,7 +2,8 @@ import * as THREE from 'three';
 
 export enum BuildingType {
     BATTERY = 'battery',
-    SOLAR_PANEL = 'solar_panel'
+    SOLAR_PANEL = 'solar_panel',
+    LIGHTHOUSE = 'lighthouse'
 }
 
 export class Building extends THREE.Group {
@@ -18,6 +19,9 @@ export class Building extends THREE.Group {
                 break;
             case BuildingType.SOLAR_PANEL:
                 this.createSolarPanelModel();
+                break;
+            case BuildingType.LIGHTHOUSE:
+                this.createLighthouseModel();
                 break;
         }
     }
@@ -64,6 +68,47 @@ export class Building extends THREE.Group {
         panel.castShadow = true;
         panel.receiveShadow = true;
         this.add(panel);
+    }
+
+    private createLighthouseModel() {
+        // Main Tower
+        const towerGeo = new THREE.CylinderGeometry(0.4, 0.8, 4, 8);
+        const towerMat = new THREE.MeshPhongMaterial({ color: 0xeeeeee });
+        const tower = new THREE.Mesh(towerGeo, towerMat);
+        tower.position.y = 2;
+        tower.castShadow = true;
+        tower.receiveShadow = true;
+        this.add(tower);
+
+        // Tower bands (red)
+        const bandGeo = new THREE.CylinderGeometry(0.61, 0.71, 0.5, 8);
+        const bandMat = new THREE.MeshPhongMaterial({ color: 0xff0000 });
+        const band1 = new THREE.Mesh(bandGeo, bandMat);
+        band1.position.y = 1;
+        this.add(band1);
+        const band2 = new THREE.Mesh(bandGeo, bandMat);
+        band2.position.y = 3;
+        this.add(band2);
+
+        // Lantern Room
+        const lanternGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.8, 8);
+        const lanternMat = new THREE.MeshPhongMaterial({ color: 0x333333 });
+        const lantern = new THREE.Mesh(lanternGeo, lanternMat);
+        lantern.position.y = 4.4;
+        this.add(lantern);
+
+        // The Light
+        const pointLight = new THREE.PointLight(0xffcc00, 3, 30);
+        pointLight.position.set(0, 4.4, 0);
+        pointLight.castShadow = true;
+        this.add(pointLight);
+
+        // Visual bulb
+        const bulbGeo = new THREE.SphereGeometry(0.3, 16, 16);
+        const bulbMat = new THREE.MeshBasicMaterial({ color: 0xfff000 });
+        const bulb = new THREE.Mesh(bulbGeo, bulbMat);
+        bulb.position.y = 4.4;
+        this.add(bulb);
     }
 
     public alignToNormal(normal: THREE.Vector3) {
