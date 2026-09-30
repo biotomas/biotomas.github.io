@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { Terrain } from './Terrain';
 import { CameraController } from './CameraController';
+import { BuildingManager } from './BuildingManager';
+import { UIManager } from '../UIManager';
 
 export class Game {
     private scene: THREE.Scene;
@@ -8,6 +10,7 @@ export class Game {
     private renderer: THREE.WebGLRenderer;
     private terrain: Terrain;
     private cameraController: CameraController;
+    private buildingManager: BuildingManager;
 
     constructor() {
         this.scene = new THREE.Scene();
@@ -31,6 +34,12 @@ export class Game {
         this.terrain = new Terrain(50, 50);
         this.scene.add(this.terrain);
 
+        // Building Manager
+        this.buildingManager = new BuildingManager(this.scene, this.camera, this.terrain);
+
+        // UI Manager (self-initializing)
+        new UIManager(this.buildingManager);
+
         // Camera Controller
         this.cameraController = new CameraController(this.camera, this.renderer.domElement);
         this.cameraController.initKeyboard();
@@ -52,6 +61,7 @@ export class Game {
         requestAnimationFrame(() => this.animate());
 
         this.cameraController.update();
+        this.buildingManager.update();
         this.renderer.render(this.scene, this.camera);
     }
 }
