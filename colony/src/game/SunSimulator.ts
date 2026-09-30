@@ -6,12 +6,15 @@ export class SunSimulator {
     private dayDuration: number = 60000; // 60 seconds for 24h
     private startTime: number;
 
+    // Rise at 5:00 (5/24 = 0.208), Set at 22:00 (22/24 = 0.916)
+    // We achieve this by remapping the day progress to an angle that spends more time "above" the horizon.
+    private readonly sunriseProgress = 5 / 24;
+    private readonly sunsetProgress = 22 / 24;
+
     constructor(scene: THREE.Scene) {
-        // Setup Directional Light for Sun with Shadows
         this.sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
         this.sunLight.castShadow = true;
         
-        // Configure Shadow Camera
         this.sunLight.shadow.mapSize.width = 2048;
         this.sunLight.shadow.mapSize.height = 2048;
         this.sunLight.shadow.camera.near = 0.5;
@@ -34,33 +37,48 @@ export class SunSimulator {
         return ((Date.now() - this.startTime) % this.dayDuration) / this.dayDuration;
     }
 
-    public update() {
+    /**
+     * Maps the 0-1 day progress to a sun angle.
+     * We want angle 0 at sunriseProgress and angle PI at sunsetProgress.
+     */
+    private getSunAngle(): number {
         const progress = this.getDayProgress();
-
-        // 24h Clock Simulation: 0.0 is midnight, 0.5 is noon.
-        // We want Noon (0.5) to be at the top (Angle = PI/2).
-        // Angle = (progress * 2PI) - PI/2.
-        // progress 0.0 -> -PI/2 (Midnight, sun at bottom)
-        // progress 0.25 -> 0 (6:00 AM, Sunrise)
-        // progress 0.5 -> PI/2 (Noon, sun at top)
-        // progress 0.75 -> PI (6:00 PM, Sunset)
         
-        const angle = (progress * Math.PI * 2) - Math.PI / 2;
+        // Linear interpolation for simpler day/night arc
+        // If we want it to be "night" outside 5-22, we need a custom mapping.
+        // A simple way is to shift and scale the progress for the "day" part.
+        const dayLength = this.sunsetProgress - this.sunriseProgress;
+        
+        if (progress >= this.sunriseProgress && progress <= this.sunsetProgress) {
+            // It's day. Map sunrise...sunset to 0...PI
+            const dayProgress = (progress - this.sunriseProgress) / dayLength;
+            return dayProgress * Math.PI;
+        } else {
+            // It's night. Map sunset...sunrise to PI...2PI
+            const nightLength = 1.0 - dayLength;
+            const nightProgress = progress < this.sunriseProgress 
+                ? (progress + (1.0 - this.sunsetProgress)) / nightLength
+                : (progress - this.sunsetProgress) / nightLength;
+            return Math.PI + nightProgress * Math.PI;
+        }
+    }
+
+    public update() {
+        const angle = this.getSunAngle();
 
         const radius = 100;
-        const x = Math.cos(angle) * radius;
-        const y = Math.sin(angle) * radius; 
+        const x = Math.cos(angle + Math.PI); // Offset by PI so it rises from one side
+        const y = Math.sin(angle); 
 
-        this.sunLight.position.set(x, y, 0);
+        this.sunLight.position.set(x, y * radius, 0);
         
-        // Intensity: Max at noon, 0 during night (Y < 0)
+        // Intensity: Max at noon, 0 during night
         this.sunLight.intensity = Math.max(0, Math.sin(angle)) * 1.5;
         this.ambientLight.intensity = 0.1 + Math.max(0, Math.sin(angle)) * 0.3;
     }
 
     public getSunIntensity(): number {
-        const progress = this.getDayProgress();
-        const angle = (progress * Math.PI * 2) - Math.PI / 2;
+        const angle = this.getSunAngle();
         return Math.max(0, Math.sin(angle));
     }
 
@@ -71,9 +89,6 @@ export class SunSimulator {
         const hours = Math.floor(totalMinutes / 60);
         const mins = Math.floor(totalMinutes % 60);
         
-        const hStr = hours.toString().padStart(2, '0');
-        const mStr = mins.toString().padStart(2, '0');
-        
-        return `${hStr}:${mStr}`;
+        return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
     }
 }
