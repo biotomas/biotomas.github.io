@@ -47,29 +47,34 @@ export class Skybox extends THREE.Group {
     public update() {
         const intensity = this.sunSimulator.getSunIntensity();
         
-        // Sky Color Transition
-        // Noon: 0x88ccff (Sky Blue)
-        // Sunset/Sunrise: 0xffa500 (Orange) -> 0x442266 (Purple)
-        // Night: 0x000005 (Deep Black/Blue)
-
+        // Smoother Sky Color Transition
+        // For an asteroid (no atmosphere), the sky should mostly stay dark, 
+        // but we'll add a subtle color shift when facing the sun.
+        
+        const nightColor = new THREE.Color(0x010103);
+        const sunsetColor = new THREE.Color(0x221133); // Dark purple twilight
+        const dayColor = new THREE.Color(0x050510);    // Deep space blue even in day
+        
         let skyColor: THREE.Color;
-        if (intensity > 0.5) {
-            // High Day: Interpolate between Light Blue and Cyan
-            skyColor = new THREE.Color(0x4488ff).lerp(new THREE.Color(0x88ccff), (intensity - 0.5) * 2);
+        
+        if (intensity > 0.1) {
+            // Facing the sun - subtle blue glow
+            skyColor = sunsetColor.clone().lerp(dayColor, (intensity - 0.1) * 1.11);
         } else if (intensity > 0) {
-            // Sunrise/Sunset: Interpolate between Purple/Orange and Blue
-            skyColor = new THREE.Color(0xff6600).lerp(new THREE.Color(0x4488ff), intensity * 2);
+            // Transition from night to twilight
+            skyColor = nightColor.clone().lerp(sunsetColor, intensity * 10);
         } else {
             // Night
-            skyColor = new THREE.Color(0x020205);
+            skyColor = nightColor;
         }
         
         (this.skySphere.material as THREE.MeshBasicMaterial).color.copy(skyColor);
 
-        // Stars visibility: Inverse of sun intensity
-        // We only show stars when intensity is low
-        const starOpacity = Math.max(0, 1.0 - intensity * 2.0);
+        // Stars visibility: Fade out only when sun is quite bright
+        // On an asteroid, stars are visible even during the day if not looking at the sun,
+        // but for game clarity we'll fade them slightly.
+        const starOpacity = Math.max(0.2, 1.0 - intensity * 0.8);
         this.starMaterial.opacity = starOpacity;
-        this.stars.visible = starOpacity > 0;
+        this.stars.visible = true;
     }
 }

@@ -17,7 +17,7 @@ export class Terrain extends THREE.Group {
         
         const geometry = this.createGeometry();
         const material = new THREE.MeshPhongMaterial({
-            color: 0x558844,
+            color: 0x777777,
             flatShading: true,
             side: THREE.DoubleSide
         });
