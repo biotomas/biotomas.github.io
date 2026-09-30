@@ -5,6 +5,7 @@ import { BuildingManager } from './BuildingManager';
 import { SunSimulator } from './SunSimulator';
 import { ResourceManager } from './ResourceManager';
 import { UIManager } from '../UIManager';
+import { Skybox } from './Skybox';
 
 export class Game {
     private scene: THREE.Scene;
@@ -15,11 +16,12 @@ export class Game {
     private buildingManager: BuildingManager;
     private sunSimulator: SunSimulator;
     private resourceManager: ResourceManager;
+    private skybox: Skybox;
     private uiManager: UIManager;
 
     constructor() {
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x223344);
+        // Background color will be handled by the Skybox
 
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         
@@ -31,6 +33,10 @@ export class Game {
 
         // Sun & Light Simulator
         this.sunSimulator = new SunSimulator(this.scene);
+
+        // Skybox
+        this.skybox = new Skybox(this.sunSimulator);
+        this.scene.add(this.skybox);
 
         // Terrain
         this.terrain = new Terrain(50, 50);
@@ -67,6 +73,7 @@ export class Game {
         requestAnimationFrame(() => this.animate());
 
         this.sunSimulator.update();
+        this.skybox.update();
         this.resourceManager.update();
         this.cameraController.update();
         this.buildingManager.update();
