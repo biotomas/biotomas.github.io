@@ -30,16 +30,20 @@ export class SunSimulator {
         this.startTime = Date.now();
     }
 
-    public update() {
-        const elapsed = (Date.now() - this.startTime) % this.dayDuration;
-        const progress = elapsed / this.dayDuration; // 0 to 1
+    private getDayProgress(): number {
+        return ((Date.now() - this.startTime) % this.dayDuration) / this.dayDuration;
+    }
 
-        // 24h Clock Simulation
-        // 0.0 (midnight) -> 0.5 (noon) -> 1.0 (midnight)
-        // We want sunrise at 7:00 (7/24 = 0.29) and sunset at 19:00 (19/24 = 0.79)
-        // Standard circle: angle = 0 is dawn, angle = PI is dusk
-        // Shift progress so 0.0 is midnight. 
-        // 0.5 progress should be Noon (Sun at top).
+    public update() {
+        const progress = this.getDayProgress();
+
+        // 24h Clock Simulation: 0.0 is midnight, 0.5 is noon.
+        // We want Noon (0.5) to be at the top (Angle = PI/2).
+        // Angle = (progress * 2PI) - PI/2.
+        // progress 0.0 -> -PI/2 (Midnight, sun at bottom)
+        // progress 0.25 -> 0 (6:00 AM, Sunrise)
+        // progress 0.5 -> PI/2 (Noon, sun at top)
+        // progress 0.75 -> PI (6:00 PM, Sunset)
         
         const angle = (progress * Math.PI * 2) - Math.PI / 2;
 
@@ -49,29 +53,25 @@ export class SunSimulator {
 
         this.sunLight.position.set(x, y, 0);
         
-        // Intensity: Day is when Y > 0
-        // We can tune the "Daylight" period by adjusting the angle mapping
-        // But for simplicity, we use the sin(angle)
+        // Intensity: Max at noon, 0 during night (Y < 0)
         this.sunLight.intensity = Math.max(0, Math.sin(angle)) * 1.5;
         this.ambientLight.intensity = 0.1 + Math.max(0, Math.sin(angle)) * 0.3;
     }
 
     public getSunIntensity(): number {
-        const elapsed = (Date.now() - this.startTime) % this.dayDuration;
-        const progress = elapsed / this.dayDuration;
+        const progress = this.getDayProgress();
         const angle = (progress * Math.PI * 2) - Math.PI / 2;
         return Math.max(0, Math.sin(angle));
     }
 
     public getFormattedTime(): string {
-        const elapsed = (Date.now() - this.startTime) % this.dayDuration;
-        const dayProgress = elapsed / this.dayDuration;
-        const totalMinutes = dayProgress * 24 * 60;
+        const progress = this.getDayProgress();
+        const totalMinutes = progress * 24 * 60;
         
-        const hours = Math.floor(totalMinutes);
-        const mins = Math.floor((totalMinutes % 1) * 60);
+        const hours = Math.floor(totalMinutes / 60);
+        const mins = Math.floor(totalMinutes % 60);
         
-        const hStr = Math.floor(hours % 24).toString().padStart(2, '0');
+        const hStr = hours.toString().padStart(2, '0');
         const mStr = mins.toString().padStart(2, '0');
         
         return `${hStr}:${mStr}`;
