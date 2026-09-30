@@ -7,6 +7,7 @@ export class BuildingManager {
     private camera: THREE.PerspectiveCamera;
     private terrain: Terrain;
     private buildings: Building[] = [];
+    private occupiedTiles: Set<string> = new Set();
     
     private activeBuildingType: BuildingType | null = null;
     private previewBuilding: Building | null = null;
@@ -32,16 +33,21 @@ export class BuildingManager {
 
         if (type) {
             this.previewBuilding = new Building(type);
-            // Make preview transparent
-            this.previewBuilding.traverse((child) => {
-                if (child instanceof THREE.Mesh) {
-                    child.material = child.material.clone();
-                    child.material.transparent = true;
-                    child.material.opacity = 0.5;
-                }
-            });
+            this.setPreviewMaterial(this.previewBuilding, 0x00ff00); // Default green ghost
             this.scene.add(this.previewBuilding);
         }
+    }
+
+    private setPreviewMaterial(building: Building, color: number) {
+        building.traverse((child) => {
+            if (child instanceof THREE.Mesh) {
+                child.material = new THREE.MeshPhongMaterial({
+                    color: color,
+                    transparent: true,
+                    opacity: 0.5
+                });
+            }
+        });
     }
 
     private onMouseMove(e: MouseEvent) {
@@ -51,8 +57,16 @@ export class BuildingManager {
         if (this.previewBuilding) {
             const intersect = this.getTerrainIntersect();
             if (intersect) {
+                const ix = Math.floor(intersect.point.x);
+                const iz = Math.floor(intersect.point.z);
+                const isOccupied = this.occupiedTiles.has(`${ix},${iz}`);
+
                 this.previewBuilding.position.copy(intersect.point);
+                this.previewBuilding.position.y = this.terrain.getHeightAt(ix, iz);
                 this.previewBuilding.visible = true;
+
+                // Visual feedback: red if blocked
+                this.setPreviewMaterial(this.previewBuilding, isOccupied ? 0xff0000 : 0x00ff00);
             } else {
                 this.previewBuilding.visible = false;
             }
@@ -60,48 +74,39 @@ export class BuildingManager {
     }
 
     private onMouseDown(e: MouseEvent) {
-        // Only place on left click and if we have an active building type
         if (e.button !== 0 || !this.activeBuildingType) return;
-        
-        // Check if we clicked on UI (very simple check for now)
         if ((e.target as HTMLElement).closest('#ui-menu')) return;
 
         const intersect = this.getTerrainIntersect();
         if (intersect) {
-            this.placeBuilding(this.activeBuildingType, intersect.point);
+            const ix = Math.floor(intersect.point.x);
+            const iz = Math.floor(intersect.point.z);
+            
+            if (!this.occupiedTiles.has(`${ix},${iz}`)) {
+                this.placeBuilding(this.activeBuildingType, ix, iz);
+            }
         }
     }
 
     private getTerrainIntersect() {
         this.raycaster.setFromCamera(this.mouse, this.camera);
-        // Intersect with the terrain group
         const intersects = this.raycaster.intersectObject(this.terrain, true);
         if (intersects.length > 0) {
             const point = intersects[0].point;
-            // Snapping to grid (assuming tileSize = 1)
-            // We snap to the center of the tile
             point.x = Math.floor(point.x) + 0.5;
             point.z = Math.floor(point.z) + 0.5;
-            
-            // For Y, we keep the original intersect height for now 
-            // (or we could sample the terrain height at this specific grid point)
             return { ...intersects[0], point };
         }
         return null;
     }
 
-    private placeBuilding(type: BuildingType, position: THREE.Vector3) {
+    private placeBuilding(type: BuildingType, ix: number, iz: number) {
         const building = new Building(type);
-        building.position.copy(position);
+        building.position.set(ix + 0.5, this.terrain.getHeightAt(ix, iz), iz + 0.5);
         this.scene.add(building);
         this.buildings.push(building);
-        
-        // Reset selection after placement? 
-        // For now, let's keep it selected for multiple placements.
-        // If you want to deselect: this.setActiveBuildingType(null);
+        this.occupiedTiles.add(`${ix},${iz}`);
     }
 
-    public update() {
-        // Any per-frame updates for buildings
-    }
+    public update() {}
 }
