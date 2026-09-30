@@ -64,20 +64,20 @@ export class BuildingManager {
 
         const intersect = this.getTerrainIntersect();
         if (intersect) {
-            // Find the closest tile on the hex grid
-            const tile = this.terrain.getClosestTile(intersect.point);
-            const normal = tile.center.clone().normalize();
+            const faceInfo = this.terrain.getFaceInfo(intersect);
+            if (faceInfo) {
+                const { center, normal, id, vA, vB, vC } = faceInfo;
 
-            this.tileHighlight.updatePosition(tile.center.x, tile.center.y, tile.center.z);
-            this.tileHighlight.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
-            this.tileHighlight.setVisible(true);
+                this.tileHighlight.updateTriangle(vA, vB, vC);
+                this.tileHighlight.setVisible(true);
 
-            if (this.previewBuilding) {
-                const isOccupied = this.occupiedTiles.has(tile.id);
-                this.previewBuilding.position.copy(tile.center);
-                this.previewBuilding.alignToNormal(normal);
-                this.previewBuilding.visible = true;
-                this.setPreviewMaterial(this.previewBuilding, isOccupied ? 0xff0000 : 0x00ff00);
+                if (this.previewBuilding) {
+                    const isOccupied = this.occupiedTiles.has(id);
+                    this.previewBuilding.position.copy(center);
+                    this.previewBuilding.alignToNormal(normal);
+                    this.previewBuilding.visible = true;
+                    this.setPreviewMaterial(this.previewBuilding, isOccupied ? 0xff0000 : 0x00ff00);
+                }
             }
         } else {
             this.tileHighlight.setVisible(false);
@@ -91,9 +91,9 @@ export class BuildingManager {
 
         const intersect = this.getTerrainIntersect();
         if (intersect) {
-            const tile = this.terrain.getClosestTile(intersect.point);
-            if (!this.occupiedTiles.has(tile.id)) {
-                this.placeBuilding(this.activeBuildingType, tile.center, tile.id);
+            const faceInfo = this.terrain.getFaceInfo(intersect);
+            if (faceInfo && !this.occupiedTiles.has(faceInfo.id)) {
+                this.placeBuilding(this.activeBuildingType, faceInfo);
             }
         }
     }
@@ -104,12 +104,15 @@ export class BuildingManager {
         return intersects.length > 0 ? intersects[0] : null;
     }
 
-    private placeBuilding(type: BuildingType, position: THREE.Vector3, tileId: string) {
+    private placeBuilding(type: BuildingType, faceInfo: any) {
         const building = new Building(type);
         
-        // We need to place it in the rotating group
-        const localPos = position.clone();
+        // Find local position relative to the asteroid group
+        const localPos = faceInfo.center.clone();
         this.placementGroup.worldToLocal(localPos);
+        
+        // Find local normal
+        // Since it's a sphere at origin, we can just use localPos normalized
         const localNormal = localPos.clone().normalize();
 
         building.position.copy(localPos);
@@ -117,7 +120,7 @@ export class BuildingManager {
         
         this.placementGroup.add(building);
         this.buildings.push(building);
-        this.occupiedTiles.add(tileId);
+        this.occupiedTiles.add(faceInfo.id);
     }
 
     public getBuildings(): Building[] {
