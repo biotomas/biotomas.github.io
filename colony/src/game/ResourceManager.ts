@@ -30,6 +30,7 @@ export class ResourceManager {
         const buildings = this.buildingManager.getBuildings();
         
         let totalProduction = 0;
+        let totalConsumption = 0;
         let totalStorageCapacity = 0;
         const worldPos = new THREE.Vector3();
         
@@ -40,17 +41,26 @@ export class ResourceManager {
                 totalProduction += 100 * intensity;
             } else if (building.type === BuildingType.BATTERY) {
                 totalStorageCapacity += 500;
+            } else if (building.type === BuildingType.HABITATION) {
+                totalConsumption += 10;
             }
         }
 
         this._currentEnergyProduction = totalProduction;
         this._maxEnergyStorage = totalStorageCapacity;
 
-        // Charge batteries at 10% of current production per second
-        if (this._storedEnergy < this._maxEnergyStorage) {
-            const chargeRate = totalProduction * 0.1;
-            this._storedEnergy = Math.min(this._maxEnergyStorage, this._storedEnergy + chargeRate * deltaTime);
-        } else if (this._storedEnergy > this._maxEnergyStorage) {
+        // Net change in energy
+        const netEnergy = (totalProduction * 0.1) - totalConsumption;
+        
+        if (netEnergy > 0) {
+            // Charging
+            this._storedEnergy = Math.min(this._maxEnergyStorage, this._storedEnergy + netEnergy * deltaTime);
+        } else {
+            // Draining
+            this._storedEnergy = Math.max(0, this._storedEnergy + netEnergy * deltaTime);
+        }
+
+        if (this._storedEnergy > this._maxEnergyStorage) {
             this._storedEnergy = this._maxEnergyStorage;
         }
     }

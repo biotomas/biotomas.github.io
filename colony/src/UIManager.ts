@@ -91,6 +91,7 @@ export class UIManager {
         const types = [
             { label: 'Battery', type: BuildingType.BATTERY },
             { label: 'Solar Panel', type: BuildingType.SOLAR_PANEL },
+            { label: 'Habitation', type: BuildingType.HABITATION },
             { label: 'Cancel', type: null }
         ];
 
