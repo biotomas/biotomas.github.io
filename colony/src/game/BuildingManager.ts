@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Building, BuildingType } from './Building';
 import { Terrain } from './Terrain';
+import { TileHighlight } from './TileHighlight';
 
 export class BuildingManager {
     private scene: THREE.Scene;
@@ -8,6 +9,7 @@ export class BuildingManager {
     private terrain: Terrain;
     private buildings: Building[] = [];
     private occupiedTiles: Set<string> = new Set();
+    private tileHighlight: TileHighlight;
     
     private activeBuildingType: BuildingType | null = null;
     private previewBuilding: Building | null = null;
@@ -18,6 +20,9 @@ export class BuildingManager {
         this.scene = scene;
         this.camera = camera;
         this.terrain = terrain;
+
+        this.tileHighlight = new TileHighlight();
+        this.scene.add(this.tileHighlight);
 
         window.addEventListener('mousemove', (e) => this.onMouseMove(e));
         window.addEventListener('mousedown', (e) => this.onMouseDown(e));
@@ -54,20 +59,24 @@ export class BuildingManager {
         this.mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
         this.mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
 
-        if (this.previewBuilding) {
-            const intersect = this.getTerrainIntersect();
-            if (intersect) {
-                const ix = Math.floor(intersect.point.x);
-                const iz = Math.floor(intersect.point.z);
+        const intersect = this.getTerrainIntersect();
+        if (intersect) {
+            const ix = Math.floor(intersect.point.x);
+            const iz = Math.floor(intersect.point.z);
+            const height = this.terrain.getHeightAt(ix, iz);
+
+            this.tileHighlight.updatePosition(ix, height, iz);
+            this.tileHighlight.setVisible(true);
+
+            if (this.previewBuilding) {
                 const isOccupied = this.occupiedTiles.has(`${ix},${iz}`);
-
-                this.previewBuilding.position.copy(intersect.point);
-                this.previewBuilding.position.y = this.terrain.getHeightAt(ix, iz);
+                this.previewBuilding.position.set(ix + 0.5, height, iz + 0.5);
                 this.previewBuilding.visible = true;
-
-                // Visual feedback: red if blocked
                 this.setPreviewMaterial(this.previewBuilding, isOccupied ? 0xff0000 : 0x00ff00);
-            } else {
+            }
+        } else {
+            this.tileHighlight.setVisible(false);
+            if (this.previewBuilding) {
                 this.previewBuilding.visible = false;
             }
         }
@@ -92,10 +101,7 @@ export class BuildingManager {
         this.raycaster.setFromCamera(this.mouse, this.camera);
         const intersects = this.raycaster.intersectObject(this.terrain, true);
         if (intersects.length > 0) {
-            const point = intersects[0].point;
-            point.x = Math.floor(point.x) + 0.5;
-            point.z = Math.floor(point.z) + 0.5;
-            return { ...intersects[0], point };
+            return intersects[0];
         }
         return null;
     }
