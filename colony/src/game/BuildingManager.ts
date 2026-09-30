@@ -99,7 +99,8 @@ export class BuildingManager {
 
     private getTerrainIntersect() {
         this.raycaster.setFromCamera(this.mouse, this.camera);
-        const intersects = this.raycaster.intersectObject(this.terrain, true);
+        // Intersect only with the terrain mesh
+        const intersects = this.raycaster.intersectObject(this.terrain.getMesh());
         if (intersects.length > 0) {
             return intersects[0];
         }

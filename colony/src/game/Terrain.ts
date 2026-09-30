@@ -4,7 +4,8 @@ export class Terrain extends THREE.Group {
     private readonly tileSize: number = 1;
     private readonly gridWidth: number;
     private readonly gridHeight: number;
-    private heights: number[][]; // Heights at corners (W+1 x H+1)
+    private heights: number[][];
+    private mesh: THREE.Mesh;
 
     constructor(width: number, height: number) {
         super();
@@ -13,17 +14,32 @@ export class Terrain extends THREE.Group {
         this.heights = Array.from({ length: width + 1 }, () => new Array(height + 1).fill(0));
 
         this.generateTerrain();
-        this.createMesh();
+        
+        const geometry = this.createGeometry();
+        const material = new THREE.MeshPhongMaterial({
+            color: 0x558844,
+            flatShading: true,
+            side: THREE.DoubleSide
+        });
+
+        this.mesh = new THREE.Mesh(geometry, material);
+        this.add(this.mesh);
+
+        const wireframe = new THREE.LineSegments(
+            new THREE.WireframeGeometry(geometry),
+            new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.1 })
+        );
+        this.add(wireframe);
     }
 
     private generateTerrain() {
         const step = 0.1;
-        const maxStepDiff = 2; // max 0.2 diff (2 * 0.1)
+        const maxStepDiff = 2;
 
         for (let x = 0; x <= this.gridWidth; x++) {
             for (let z = 0; z <= this.gridHeight; z++) {
-                let minH = -2.0; // Floor
-                let maxH = 2.0;  // Ceiling
+                let minH = -2.0;
+                let maxH = 2.0;
 
                 if (x > 0) {
                     minH = Math.max(minH, this.heights[x - 1][z] - maxStepDiff * step);
@@ -34,7 +50,6 @@ export class Terrain extends THREE.Group {
                     maxH = Math.min(maxH, this.heights[x][z - 1] + maxStepDiff * step);
                 }
 
-                // Randomly pick a height in steps of 0.1
                 const possibleSteps = Math.floor((maxH - minH) / step);
                 const randomStep = Math.floor(Math.random() * (possibleSteps + 1));
                 this.heights[x][z] = parseFloat((minH + randomStep * step).toFixed(1));
@@ -42,52 +57,46 @@ export class Terrain extends THREE.Group {
         }
     }
 
-    private createMesh() {
-        const geometry = new THREE.PlaneGeometry(
-            this.gridWidth * this.tileSize,
-            this.gridHeight * this.tileSize,
-            this.gridWidth,
-            this.gridHeight
-        );
+    private createGeometry(): THREE.BufferGeometry {
+        const geometry = new THREE.BufferGeometry();
+        const vertices: number[] = [];
+        const indices: number[] = [];
 
-        geometry.rotateX(-Math.PI / 2);
-
-        const vertices = geometry.attributes.position.array;
+        // Create vertices
         for (let z = 0; z <= this.gridHeight; z++) {
             for (let x = 0; x <= this.gridWidth; x++) {
-                const vertexIndex = (z * (this.gridWidth + 1) + x) * 3;
-                vertices[vertexIndex + 1] = this.heights[x][z];
+                vertices.push(x * this.tileSize, this.heights[x][z], z * this.tileSize);
             }
         }
 
+        // Create indices (two triangles per tile)
+        for (let z = 0; z < this.gridHeight; z++) {
+            for (let x = 0; x < this.gridWidth; x++) {
+                const row1 = z * (this.gridWidth + 1);
+                const row2 = (z + 1) * (this.gridWidth + 1);
+
+                // Triangle 1
+                indices.push(row1 + x, row2 + x, row1 + x + 1);
+                // Triangle 2
+                indices.push(row1 + x + 1, row2 + x, row2 + x + 1);
+            }
+        }
+
+        geometry.setIndex(indices);
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
         geometry.computeVertexNormals();
+        return geometry;
+    }
 
-        const material = new THREE.MeshPhongMaterial({
-            color: 0x558844,
-            flatShading: true,
-            side: THREE.DoubleSide
-        });
-
-        const mesh = new THREE.Mesh(geometry, material);
-        // Offset to align 0,0 corner with world 0,0
-        mesh.position.set(this.gridWidth / 2, 0, this.gridHeight / 2);
-        this.add(mesh);
-        
-        const wireframe = new THREE.LineSegments(
-            new THREE.WireframeGeometry(geometry),
-            new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.1 })
-        );
-        wireframe.position.copy(mesh.position);
-        this.add(wireframe);
+    public getMesh(): THREE.Mesh {
+        return this.mesh;
     }
 
     public getHeightAt(x: number, z: number): number {
-        // Simple average for now, or sample the 4 corners
         const ix = Math.floor(x);
         const iz = Math.floor(z);
         if (ix < 0 || ix >= this.gridWidth || iz < 0 || iz >= this.gridHeight) return 0;
         
-        // Return max height of the tile corners to ensure building is above ground
         return Math.max(
             this.heights[ix][iz],
             this.heights[ix+1][iz],
