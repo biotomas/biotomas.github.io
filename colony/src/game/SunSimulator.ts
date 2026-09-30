@@ -15,14 +15,19 @@ export class SunSimulator {
         this.sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
         this.sunLight.castShadow = true;
         
+        // Target the center of the 50x50 map
+        this.sunLight.target.position.set(25, 0, 25);
+        scene.add(this.sunLight.target);
+
+        // Configure Shadow Camera to cover the 50x50 map
         this.sunLight.shadow.mapSize.width = 2048;
         this.sunLight.shadow.mapSize.height = 2048;
         this.sunLight.shadow.camera.near = 0.5;
         this.sunLight.shadow.camera.far = 500;
-        this.sunLight.shadow.camera.left = -50;
-        this.sunLight.shadow.camera.right = 50;
-        this.sunLight.shadow.camera.top = 50;
-        this.sunLight.shadow.camera.bottom = -50;
+        this.sunLight.shadow.camera.left = -40;
+        this.sunLight.shadow.camera.right = 40;
+        this.sunLight.shadow.camera.top = 40;
+        this.sunLight.shadow.camera.bottom = -40;
         this.sunLight.shadow.bias = -0.0005;
 
         scene.add(this.sunLight);
@@ -45,8 +50,6 @@ export class SunSimulator {
         const progress = this.getDayProgress();
         
         // Linear interpolation for simpler day/night arc
-        // If we want it to be "night" outside 5-22, we need a custom mapping.
-        // A simple way is to shift and scale the progress for the "day" part.
         const dayLength = this.sunsetProgress - this.sunriseProgress;
         
         if (progress >= this.sunriseProgress && progress <= this.sunsetProgress) {
@@ -67,10 +70,12 @@ export class SunSimulator {
         const angle = this.getSunAngle();
 
         const radius = 100;
-        const x = Math.cos(angle + Math.PI); // Offset by PI so it rises from one side
-        const y = Math.sin(angle); 
+        // Orbit around the center of the map (25, 0, 25)
+        const x = 25 + Math.cos(angle + Math.PI) * radius;
+        const y = Math.sin(angle) * radius; 
+        const z = 25; 
 
-        this.sunLight.position.set(x, y * radius, 0);
+        this.sunLight.position.set(x, y, z);
         
         // Intensity: Max at noon, 0 during night
         this.sunLight.intensity = Math.max(0, Math.sin(angle)) * 1.5;
