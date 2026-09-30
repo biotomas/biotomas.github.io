@@ -76,7 +76,18 @@ export class BuildingManager {
         this.raycaster.setFromCamera(this.mouse, this.camera);
         // Intersect with the terrain group
         const intersects = this.raycaster.intersectObject(this.terrain, true);
-        return intersects.length > 0 ? intersects[0] : null;
+        if (intersects.length > 0) {
+            const point = intersects[0].point;
+            // Snapping to grid (assuming tileSize = 1)
+            // We snap to the center of the tile
+            point.x = Math.floor(point.x) + 0.5;
+            point.z = Math.floor(point.z) + 0.5;
+            
+            // For Y, we keep the original intersect height for now 
+            // (or we could sample the terrain height at this specific grid point)
+            return { ...intersects[0], point };
+        }
+        return null;
     }
 
     private placeBuilding(type: BuildingType, position: THREE.Vector3) {
