@@ -11,7 +11,6 @@ export class BuildingManager {
     private occupiedTiles: Set<string> = new Set();
     private tileHighlight: TileHighlight;
     
-    // Group where buildings are placed (the rotating asteroid)
     public placementGroup: THREE.Object3D;
 
     private activeBuildingType: BuildingType | null = null;
@@ -26,7 +25,6 @@ export class BuildingManager {
         this.placementGroup = scene; 
 
         this.tileHighlight = new TileHighlight();
-        // Highlight stays in world space for easier mouse tracking
         this.scene.add(this.tileHighlight);
 
         window.addEventListener('mousemove', (e) => this.onMouseMove(e));
@@ -66,28 +64,17 @@ export class BuildingManager {
 
         const intersect = this.getTerrainIntersect();
         if (intersect) {
-            // Get position in world space
-            const worldPos = intersect.point;
-            const normal = worldPos.clone().normalize();
-            const surfacePos = this.terrain.getSurfacePoint(normal);
+            // Find the closest tile on the hex grid
+            const tile = this.terrain.getClosestTile(intersect.point);
+            const normal = tile.center.clone().normalize();
 
-            this.tileHighlight.updatePosition(surfacePos.x, surfacePos.y, surfacePos.z);
+            this.tileHighlight.updatePosition(tile.center.x, tile.center.y, tile.center.z);
             this.tileHighlight.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
             this.tileHighlight.setVisible(true);
 
             if (this.previewBuilding) {
-                // To check occupation, we need the local coordinate relative to the rotating asteroid
-                const localPos = worldPos.clone();
-                this.placementGroup.worldToLocal(localPos);
-                const localNormal = localPos.clone().normalize();
-                
-                const lat = Math.round(Math.asin(localNormal.y) * 10) / 10;
-                const lon = Math.round(Math.atan2(localNormal.x, localNormal.z) * 10) / 10;
-                const tileKey = `${lat.toFixed(1)},${lon.toFixed(1)}`;
-
-                const isOccupied = this.occupiedTiles.has(tileKey);
-                
-                this.previewBuilding.position.copy(surfacePos);
+                const isOccupied = this.occupiedTiles.has(tile.id);
+                this.previewBuilding.position.copy(tile.center);
                 this.previewBuilding.alignToNormal(normal);
                 this.previewBuilding.visible = true;
                 this.setPreviewMaterial(this.previewBuilding, isOccupied ? 0xff0000 : 0x00ff00);
@@ -104,38 +91,33 @@ export class BuildingManager {
 
         const intersect = this.getTerrainIntersect();
         if (intersect) {
-            const worldPos = intersect.point;
-            const localPos = worldPos.clone();
-            this.placementGroup.worldToLocal(localPos);
-            const localNormal = localPos.clone().normalize();
-
-            const lat = Math.round(Math.asin(localNormal.y) * 10) / 10;
-            const lon = Math.round(Math.atan2(localNormal.x, localNormal.z) * 10) / 10;
-            const tileKey = `${lat.toFixed(1)},${lon.toFixed(1)}`;
-            
-            if (!this.occupiedTiles.has(tileKey)) {
-                this.placeBuilding(this.activeBuildingType, localNormal, tileKey);
+            const tile = this.terrain.getClosestTile(intersect.point);
+            if (!this.occupiedTiles.has(tile.id)) {
+                this.placeBuilding(this.activeBuildingType, tile.center, tile.id);
             }
         }
     }
 
     private getTerrainIntersect() {
         this.raycaster.setFromCamera(this.mouse, this.camera);
-        // Intersect with the terrain mesh which is inside the rotating group
         const intersects = this.raycaster.intersectObject(this.terrain.getMesh(), true);
         return intersects.length > 0 ? intersects[0] : null;
     }
 
-    private placeBuilding(type: BuildingType, localNormal: THREE.Vector3, tileKey: string) {
+    private placeBuilding(type: BuildingType, position: THREE.Vector3, tileId: string) {
         const building = new Building(type);
-        // Position relative to the placement group (asteroid)
-        const localSurfacePos = localNormal.clone().multiplyScalar(this.terrain.getRadiusAt(localNormal));
-        building.position.copy(localSurfacePos);
+        
+        // We need to place it in the rotating group
+        const localPos = position.clone();
+        this.placementGroup.worldToLocal(localPos);
+        const localNormal = localPos.clone().normalize();
+
+        building.position.copy(localPos);
         building.alignToNormal(localNormal);
         
         this.placementGroup.add(building);
         this.buildings.push(building);
-        this.occupiedTiles.add(tileKey);
+        this.occupiedTiles.add(tileId);
     }
 
     public getBuildings(): Building[] {

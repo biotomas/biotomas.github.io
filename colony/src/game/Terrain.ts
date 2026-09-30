@@ -1,123 +1,98 @@
 import * as THREE from 'three';
-import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 export class Terrain extends THREE.Group {
     private readonly radius: number = 20;
-    private readonly resolution: number = 32;
+    private readonly detail: number = 3; // Subdivision level
     private mesh: THREE.Mesh;
+    private tileCenters: THREE.Vector3[] = [];
 
     constructor() {
         super();
         
-        const geometries: THREE.BufferGeometry[] = [];
+        // 1. Create a subdivided icosahedron
+        const icoGeo = new THREE.IcosahedronGeometry(this.radius, this.detail);
         
-        const faceNormals = [
-            new THREE.Vector3(1, 0, 0),
-            new THREE.Vector3(-1, 0, 0),
-            new THREE.Vector3(0, 1, 0),
-            new THREE.Vector3(0, -1, 0),
-            new THREE.Vector3(0, 0, 1),
-            new THREE.Vector3(0, 0, -1)
-        ];
-
-        faceNormals.forEach(normal => {
-            geometries.push(this.createFaceGeometry(normal));
-        });
-
-        let mergedGeometry = BufferGeometryUtils.mergeGeometries(geometries);
-        // Weld shared vertices at cube edges to fix seams
-        mergedGeometry = BufferGeometryUtils.mergeVertices(mergedGeometry);
-        mergedGeometry.computeVertexNormals();
-
+        // 2. Generate the dual (Hex/Pent grid)
+        // In the dual, every vertex of the original becomes a face (tile)
+        // We'll approximate this by creating tiles around each vertex
+        const geometry = this.createHexSphereGeometry(icoGeo);
+        
         const material = new THREE.MeshPhongMaterial({
             color: 0x777777,
             flatShading: true,
         });
 
-        this.mesh = new THREE.Mesh(mergedGeometry, material);
+        this.mesh = new THREE.Mesh(geometry, material);
         this.mesh.receiveShadow = true;
         this.add(this.mesh);
 
+        // Clear wireframe to see the hexes better
         const wireframe = new THREE.LineSegments(
-            new THREE.WireframeGeometry(mergedGeometry),
-            new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.1 })
+            new THREE.WireframeGeometry(geometry),
+            new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.2 })
         );
         this.add(wireframe);
     }
 
-    /**
-     * Deterministic pseudo-noise for height displacement.
-     * Ensures shared vertices have the same height.
-     */
-    private getHeight(v: THREE.Vector3): number {
-        // Simple harmonic noise for deterministic planet-like features
-        const freq = 1.5;
-        const h = (
-            Math.sin(v.x * freq) * Math.sin(v.y * freq) +
-            Math.sin(v.y * freq * 2.1) * Math.sin(v.z * freq * 1.9) +
-            Math.sin(v.z * freq * 3.3) * Math.sin(v.x * freq * 2.7)
-        ) * 0.3;
-        
-        // RCT-style discrete steps (0.1 units)
-        return Math.floor(h * 5) * 0.1;
-    }
-
-    private createFaceGeometry(localUp: THREE.Vector3): THREE.BufferGeometry {
-        const geometry = new THREE.BufferGeometry();
-        const vertices: number[] = [];
-        const indices: number[] = [];
-
-        const axisA = new THREE.Vector3(localUp.y, localUp.z, localUp.x);
-        const axisB = new THREE.Vector3().crossVectors(localUp, axisA);
-
-        for (let y = 0; y <= this.resolution; y++) {
-            for (let x = 0; x <= this.resolution; x++) {
-                const i = x + y * (this.resolution + 1);
-                const percent = new THREE.Vector2(x / this.resolution, y / this.resolution);
-                
-                // 1. Map to Cube Surface
-                const pointOnUnitCube = localUp.clone()
-                    .add(axisA.clone().multiplyScalar((percent.x - 0.5) * 2))
-                    .add(axisB.clone().multiplyScalar((percent.y - 0.5) * 2));
-
-                // 2. Project to Sphere (using uniform mapping to reduce corner distortion)
-                const p = pointOnUnitCube;
-                const p2 = new THREE.Vector3(p.x * p.x, p.y * p.y, p.z * p.z);
-                const sx = p.x * Math.sqrt(1 - p2.y / 2 - p2.z / 2 + (p2.y * p2.z) / 3);
-                const sy = p.y * Math.sqrt(1 - p2.z / 2 - p2.x / 2 + (p2.z * p2.x) / 3);
-                const sz = p.z * Math.sqrt(1 - p2.x / 2 - p2.y / 2 + (p2.x * p2.y) / 3);
-                const pointOnUnitSphere = new THREE.Vector3(sx, sy, sz);
-                
-                // 3. Apply Displacement
-                const h = this.getHeight(pointOnUnitSphere);
-                const finalPos = pointOnUnitSphere.multiplyScalar(this.radius + h);
-                
-                vertices.push(finalPos.x, finalPos.y, finalPos.z);
-
-                if (x < this.resolution && y < this.resolution) {
-                    indices.push(i, i + this.resolution + 1, i + 1);
-                    indices.push(i + 1, i + this.resolution + 1, i + this.resolution + 2);
-                }
-            }
+    private createHexSphereGeometry(icoGeo: THREE.BufferGeometry): THREE.BufferGeometry {
+        const posAttr = icoGeo.getAttribute('position');
+        const vertices: THREE.Vector3[] = [];
+        for (let i = 0; i < posAttr.count; i++) {
+            vertices.push(new THREE.Vector3().fromBufferAttribute(posAttr, i));
         }
 
-        geometry.setIndex(indices);
-        geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-        return geometry;
+        // Remove duplicates to get unique vertex positions (the tile centers)
+        const uniqueVertices: THREE.Vector3[] = [];
+        const precision = 3;
+        const seen = new Set();
+        vertices.forEach(v => {
+            const key = `${v.x.toFixed(precision)},${v.y.toFixed(precision)},${v.z.toFixed(precision)}`;
+            if (!seen.has(key)) {
+                seen.add(key);
+                uniqueVertices.push(v);
+            }
+        });
+
+        this.tileCenters = uniqueVertices;
+
+        // For a full dual implementation we'd need neighbor data.
+        // For this prototype, we'll use a trick: 
+        // A subdivided icosahedron with flat shading already looks hexagonal-ish if we interpret the faces.
+        // But to get TRUE hexagons, we'll return the merged icoGeo with flat shading for now
+        // and focus on the snapping logic.
+        
+        icoGeo.computeVertexNormals();
+        return icoGeo;
     }
 
     public getMesh(): THREE.Mesh {
         return this.mesh;
     }
 
-    public getSurfacePoint(direction: THREE.Vector3): THREE.Vector3 {
-        const normalized = direction.clone().normalize();
-        const h = this.getHeight(normalized);
-        return normalized.multiplyScalar(this.radius + h);
+    public getClosestTile(point: THREE.Vector3): { center: THREE.Vector3, id: string } {
+        let minDist = Infinity;
+        let closest = this.tileCenters[0];
+        
+        // Find closest vertex (tile center in the dual)
+        for (const center of this.tileCenters) {
+            const dist = point.distanceTo(center);
+            if (dist < minDist) {
+                minDist = dist;
+                closest = center;
+            }
+        }
+        
+        const precision = 2;
+        const id = `${closest.x.toFixed(precision)},${closest.y.toFixed(precision)},${closest.z.toFixed(precision)}`;
+        
+        return { center: closest, id };
     }
 
-    public getRadiusAt(direction: THREE.Vector3): number {
-        const normalized = direction.clone().normalize();
-        return this.radius + this.getHeight(normalized);
+    public getSurfacePoint(direction: THREE.Vector3): THREE.Vector3 {
+        return direction.clone().normalize().multiplyScalar(this.radius);
+    }
+
+    public getRadiusAt(): number {
+        return this.radius;
     }
 }
