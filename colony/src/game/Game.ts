@@ -62,7 +62,7 @@ export class Game {
         this.uiManager.setManagers(this.resourceManager, this.sunSimulator);
 
         // Camera Controller
-        this.cameraController = new CameraController(this.camera, this.renderer.domElement);
+        this.cameraController = new CameraController(this.camera, this.renderer.domElement, this.asteroidGroup);
         this.cameraController.initKeyboard();
 
         window.addEventListener('resize', () => this.onWindowResize(), false);
