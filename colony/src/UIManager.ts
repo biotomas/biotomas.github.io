@@ -1,17 +1,32 @@
 import { BuildingType } from './game/Building';
 import { BuildingManager } from './game/BuildingManager';
+import { ResourceManager } from './game/ResourceManager';
 
 export class UIManager {
     private menuContainer: HTMLElement;
+    private statusContainer: HTMLElement;
     private buildingManager: BuildingManager;
+    private resourceManager: ResourceManager | null = null;
 
     constructor(buildingManager: BuildingManager) {
         this.buildingManager = buildingManager;
+        
         this.menuContainer = document.createElement('div');
         this.menuContainer.id = 'ui-menu';
+        
+        this.statusContainer = document.createElement('div');
+        this.statusContainer.id = 'ui-status';
+
         this.applyStyles();
         this.createMenu();
+        this.createStatus();
+
         document.body.appendChild(this.menuContainer);
+        document.body.appendChild(this.statusContainer);
+    }
+
+    public setResourceManager(resourceManager: ResourceManager) {
+        this.resourceManager = resourceManager;
     }
 
     private applyStyles() {
@@ -27,6 +42,21 @@ export class UIManager {
             borderRadius: '8px',
             border: '1px solid #444',
             zIndex: '100'
+        });
+
+        Object.assign(this.statusContainer.style, {
+            position: 'absolute',
+            top: '20px',
+            left: '20px',
+            padding: '10px 20px',
+            background: 'rgba(0, 0, 0, 0.7)',
+            color: '#00ff00',
+            fontFamily: 'monospace',
+            fontSize: '18px',
+            borderRadius: '4px',
+            border: '1px solid #444',
+            zIndex: '100',
+            minWidth: '250px'
         });
 
         // Add CSS for buttons globally
@@ -74,5 +104,16 @@ export class UIManager {
             };
             this.menuContainer.appendChild(btn);
         });
+    }
+
+    private createStatus() {
+        this.statusContainer.innerHTML = 'Energy Production: 0 units';
+    }
+
+    public update() {
+        if (this.resourceManager) {
+            const prod = Math.round(this.resourceManager.currentEnergyProduction);
+            this.statusContainer.innerHTML = `Energy Production: ${prod} units`;
+        }
     }
 }

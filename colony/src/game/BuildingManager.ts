@@ -126,5 +126,9 @@ export class BuildingManager {
         this.occupiedTiles.add(`${ix},${iz}`);
     }
 
+    public getBuildings(): Building[] {
+        return this.buildings;
+    }
+
     public update() {}
 }
