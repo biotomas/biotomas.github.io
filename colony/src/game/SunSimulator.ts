@@ -8,28 +8,28 @@ export class SunSimulator {
     private dayDuration: number = 60000;
     private startTime: number;
 
-    private readonly sunriseProgress = 5 / 24;
-    private readonly sunsetProgress = 22 / 24;
+    // Sun is fixed in space. Let's place it far away on the X axis.
+    private readonly sunPosition = new THREE.Vector3(150, 0, 0);
 
     constructor(scene: THREE.Scene) {
         this.sunGroup = new THREE.Group();
         scene.add(this.sunGroup);
 
-        this.sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
+        this.sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
         this.sunLight.castShadow = true;
         
-        // Target origin for the planet
+        // Target origin (the planet center)
         this.sunLight.target.position.set(0, 0, 0);
         scene.add(this.sunLight.target);
 
         // Visual Sun
-        const sunGeo = new THREE.SphereGeometry(4, 32, 32);
+        const sunGeo = new THREE.SphereGeometry(6, 32, 32);
         const sunMat = new THREE.MeshBasicMaterial({ color: 0xffffee });
         const sunMesh = new THREE.Mesh(sunGeo, sunMat);
         this.sunGroup.add(sunMesh);
 
         // Glow effect
-        const glowGeo = new THREE.SphereGeometry(8, 32, 32);
+        const glowGeo = new THREE.SphereGeometry(12, 32, 32);
         const glowMat = new THREE.MeshBasicMaterial({
             color: 0xffccaa,
             transparent: true,
@@ -41,7 +41,7 @@ export class SunSimulator {
         this.sunGroup.add(glowMesh);
 
         // Point light for close-up glow
-        this.pointLight = new THREE.PointLight(0xffaa66, 1.0, 500);
+        this.pointLight = new THREE.PointLight(0xffaa66, 1.5, 500);
         this.sunGroup.add(this.pointLight);
 
         // Configure Shadow Camera for Sphere
@@ -55,6 +55,10 @@ export class SunSimulator {
         this.sunLight.shadow.camera.bottom = -40;
         this.sunLight.shadow.bias = -0.0005;
 
+        // Position fixed sun
+        this.sunLight.position.copy(this.sunPosition);
+        this.sunGroup.position.copy(this.sunPosition);
+
         scene.add(this.sunLight);
 
         this.ambientLight = new THREE.AmbientLight(0xffffff, 0.1);
@@ -67,45 +71,34 @@ export class SunSimulator {
         return ((Date.now() - this.startTime) % this.dayDuration) / this.dayDuration;
     }
 
-    private getSunAngle(): number {
-        const progress = this.getDayProgress();
-        const dayLength = this.sunsetProgress - this.sunriseProgress;
-        
-        if (progress >= this.sunriseProgress && progress <= this.sunsetProgress) {
-            const dayProgress = (progress - this.sunriseProgress) / dayLength;
-            return dayProgress * Math.PI;
-        } else {
-            const nightLength = 1.0 - dayLength;
-            const nightProgress = progress < this.sunriseProgress 
-                ? (progress + (1.0 - this.sunsetProgress)) / nightLength
-                : (progress - this.sunsetProgress) / nightLength;
-            return Math.PI + nightProgress * Math.PI;
-        }
-    }
-
     public update() {
-        const angle = this.getSunAngle();
-        const radius = 150; // Increased radius for planet scale
+        // Sun is fixed in this simulation.
+        // We only update intensities if we want them to flicker or pulse, 
+        // but static is more realistic for the fixed reference frame.
+    }
 
-        const x = Math.cos(angle + Math.PI) * radius;
-        const y = Math.sin(angle) * radius; 
-        const z = 0;
+    public getSunIntensityAt(worldPosition: THREE.Vector3): number {
+        // Vector from planet center to position
+        const toPos = worldPosition.clone().normalize();
+        // Vector from planet center to sun
+        const toSun = this.sunPosition.clone().normalize();
+        // Dot product gives us the "sunniness" (1 at noon, 0 at dawn/dusk, -1 at midnight)
+        return Math.max(0, toPos.dot(toSun));
+    }
 
-        this.sunLight.position.set(x, y, z);
-        this.sunGroup.position.set(x, y, z);
+    public getFormattedTime(planetRotationY: number): string {
+        // Time depends on rotation relative to the sun.
+        // If rotation 0 is "Noon" facing the sun (150, 0, 0),
+        // then time 12:00 is at rotation 0.
+        // Rotation goes 0 to 2PI.
         
-        const intensity = Math.max(0, Math.sin(angle));
-        this.sunLight.intensity = intensity * 1.5;
-        this.pointLight.intensity = intensity * 2.0;
-        this.ambientLight.intensity = 0.05 + intensity * 0.2;
-    }
-
-    public getSunIntensity(): number {
-        return Math.max(0, Math.sin(this.getSunAngle()));
-    }
-
-    public getFormattedTime(): string {
-        const progress = this.getDayProgress();
+        // Normalize rotation to 0..1 range
+        let progress = (planetRotationY % (Math.PI * 2)) / (Math.PI * 2);
+        if (progress < 0) progress += 1.0;
+        
+        // Offset so that 12:00 is facing the sun
+        // Depending on coordinate system, we might need an offset.
+        // If Sun is at +X, and planet rotates CCW, then face +X is Noon.
         const totalMinutes = progress * 24 * 60;
         const hours = Math.floor(totalMinutes / 60);
         const mins = Math.floor(totalMinutes % 60);

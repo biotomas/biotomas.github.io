@@ -110,13 +110,13 @@ export class UIManager {
     }
 
     private createStatus() {
-        this.statusContainer.innerHTML = 'Time: 00:00 | Energy: 0 units';
+        this.statusContainer.innerHTML = 'Time: 12:00 | Energy: 0 units';
     }
 
-    public update() {
+    public update(planetRotationY: number = 0) {
         if (this.resourceManager && this.sunSimulator) {
             const prod = Math.round(this.resourceManager.currentEnergyProduction);
-            const time = this.sunSimulator.getFormattedTime();
+            const time = this.sunSimulator.getFormattedTime(planetRotationY);
             this.statusContainer.innerHTML = `Time: ${time} | Energy Production: ${prod} units`;
         }
     }

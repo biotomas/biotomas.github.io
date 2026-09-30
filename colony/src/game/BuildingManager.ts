@@ -11,6 +11,9 @@ export class BuildingManager {
     private occupiedTiles: Set<string> = new Set();
     private tileHighlight: TileHighlight;
     
+    // Group where buildings are placed (the rotating asteroid)
+    public placementGroup: THREE.Object3D;
+
     private activeBuildingType: BuildingType | null = null;
     private previewBuilding: Building | null = null;
     private raycaster: THREE.Raycaster = new THREE.Raycaster();
@@ -20,8 +23,10 @@ export class BuildingManager {
         this.scene = scene;
         this.camera = camera;
         this.terrain = terrain;
+        this.placementGroup = scene; 
 
         this.tileHighlight = new TileHighlight();
+        // Highlight stays in world space for easier mouse tracking
         this.scene.add(this.tileHighlight);
 
         window.addEventListener('mousemove', (e) => this.onMouseMove(e));
@@ -61,21 +66,28 @@ export class BuildingManager {
 
         const intersect = this.getTerrainIntersect();
         if (intersect) {
-            const normal = intersect.point.clone().normalize();
-            const pos = this.terrain.getSurfacePoint(normal);
+            // Get position in world space
+            const worldPos = intersect.point;
+            const normal = worldPos.clone().normalize();
+            const surfacePos = this.terrain.getSurfacePoint(normal);
 
-            // Simple lat/long snap for highlights
-            const lat = Math.round(Math.asin(normal.y) * 10) / 10;
-            const lon = Math.round(Math.atan2(normal.x, normal.z) * 10) / 10;
-            const tileKey = `${lat.toFixed(1)},${lon.toFixed(1)}`;
-
-            this.tileHighlight.updatePosition(pos.x, pos.y, pos.z);
+            this.tileHighlight.updatePosition(surfacePos.x, surfacePos.y, surfacePos.z);
             this.tileHighlight.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
             this.tileHighlight.setVisible(true);
 
             if (this.previewBuilding) {
+                // To check occupation, we need the local coordinate relative to the rotating asteroid
+                const localPos = worldPos.clone();
+                this.placementGroup.worldToLocal(localPos);
+                const localNormal = localPos.clone().normalize();
+                
+                const lat = Math.round(Math.asin(localNormal.y) * 10) / 10;
+                const lon = Math.round(Math.atan2(localNormal.x, localNormal.z) * 10) / 10;
+                const tileKey = `${lat.toFixed(1)},${lon.toFixed(1)}`;
+
                 const isOccupied = this.occupiedTiles.has(tileKey);
-                this.previewBuilding.position.copy(pos);
+                
+                this.previewBuilding.position.copy(surfacePos);
                 this.previewBuilding.alignToNormal(normal);
                 this.previewBuilding.visible = true;
                 this.setPreviewMaterial(this.previewBuilding, isOccupied ? 0xff0000 : 0x00ff00);
@@ -92,29 +104,36 @@ export class BuildingManager {
 
         const intersect = this.getTerrainIntersect();
         if (intersect) {
-            const normal = intersect.point.clone().normalize();
-            const lat = Math.round(Math.asin(normal.y) * 10) / 10;
-            const lon = Math.round(Math.atan2(normal.x, normal.z) * 10) / 10;
+            const worldPos = intersect.point;
+            const localPos = worldPos.clone();
+            this.placementGroup.worldToLocal(localPos);
+            const localNormal = localPos.clone().normalize();
+
+            const lat = Math.round(Math.asin(localNormal.y) * 10) / 10;
+            const lon = Math.round(Math.atan2(localNormal.x, localNormal.z) * 10) / 10;
             const tileKey = `${lat.toFixed(1)},${lon.toFixed(1)}`;
             
             if (!this.occupiedTiles.has(tileKey)) {
-                this.placeBuilding(this.activeBuildingType, normal, tileKey);
+                this.placeBuilding(this.activeBuildingType, localNormal, tileKey);
             }
         }
     }
 
     private getTerrainIntersect() {
         this.raycaster.setFromCamera(this.mouse, this.camera);
-        const intersects = this.raycaster.intersectObject(this.terrain.getMesh());
+        // Intersect with the terrain mesh which is inside the rotating group
+        const intersects = this.raycaster.intersectObject(this.terrain.getMesh(), true);
         return intersects.length > 0 ? intersects[0] : null;
     }
 
-    private placeBuilding(type: BuildingType, normal: THREE.Vector3, tileKey: string) {
+    private placeBuilding(type: BuildingType, localNormal: THREE.Vector3, tileKey: string) {
         const building = new Building(type);
-        const pos = this.terrain.getSurfacePoint(normal);
-        building.position.copy(pos);
-        building.alignToNormal(normal);
-        this.scene.add(building);
+        // Position relative to the placement group (asteroid)
+        const localSurfacePos = localNormal.clone().multiplyScalar(this.terrain.getRadiusAt());
+        building.position.copy(localSurfacePos);
+        building.alignToNormal(localNormal);
+        
+        this.placementGroup.add(building);
         this.buildings.push(building);
         this.occupiedTiles.add(tileKey);
     }

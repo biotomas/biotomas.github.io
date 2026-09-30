@@ -1,6 +1,7 @@
 import { BuildingManager } from './BuildingManager';
 import { SunSimulator } from './SunSimulator';
 import { BuildingType } from './Building';
+import * as THREE from 'three';
 
 export class ResourceManager {
     private buildingManager: BuildingManager;
@@ -19,13 +20,16 @@ export class ResourceManager {
 
     private calculateEnergyProduction() {
         const buildings = this.buildingManager.getBuildings();
-        const sunIntensity = this.sunSimulator.getSunIntensity();
         
         let totalProduction = 0;
+        const worldPos = new THREE.Vector3();
         
         for (const building of buildings) {
             if (building.type === BuildingType.SOLAR_PANEL) {
-                totalProduction += 100 * sunIntensity;
+                // Get world position of the building to check its orientation relative to the fixed sun
+                building.getWorldPosition(worldPos);
+                const intensity = this.sunSimulator.getSunIntensityAt(worldPos);
+                totalProduction += 100 * intensity;
             }
         }
 
