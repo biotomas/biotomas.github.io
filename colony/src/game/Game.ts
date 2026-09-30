@@ -48,11 +48,10 @@ export class Game {
 
         this.terrain = new Terrain();
         this.asteroidGroup.add(this.terrain);
-
-        this.buildingManager = new BuildingManager(this.scene, this.camera, this.terrain);
-        // We need to make sure buildings are added to the asteroidGroup so they rotate with it
-        // We'll modify BuildingManager to use asteroidGroup instead of scene
-        (this.buildingManager as any).placementGroup = this.asteroidGroup;
+// Building Manager
+this.buildingManager = new BuildingManager(this.scene, this.camera, this.terrain);
+this.buildingManager.initEvents();
+this.buildingManager.placementGroup = this.asteroidGroup;
 
         // Resource Manager
         this.resourceManager = new ResourceManager(this.buildingManager, this.sunSimulator);

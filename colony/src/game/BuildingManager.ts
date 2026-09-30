@@ -4,7 +4,6 @@ import { Terrain } from './Terrain';
 import { TileHighlight } from './TileHighlight';
 
 export class BuildingManager {
-    private scene: THREE.Scene;
     private camera: THREE.PerspectiveCamera;
     private terrain: Terrain;
     private buildings: Building[] = [];
@@ -18,31 +17,29 @@ export class BuildingManager {
     private raycaster: THREE.Raycaster = new THREE.Raycaster();
     private mouse: THREE.Vector2 = new THREE.Vector2();
 
+    private lastMouseScreenX: number = -1;
+    private lastMouseScreenY: number = -1;
+
     constructor(scene: THREE.Scene, camera: THREE.PerspectiveCamera, terrain: Terrain) {
-        this.scene = scene;
         this.camera = camera;
         this.terrain = terrain;
         this.placementGroup = scene; 
 
         this.tileHighlight = new TileHighlight();
-        this.scene.add(this.tileHighlight);
-
-        window.addEventListener('mousemove', (e) => this.onMouseMove(e));
-        window.addEventListener('mousedown', (e) => this.onMouseDown(e));
     }
 
     public setActiveBuildingType(type: BuildingType | null) {
         this.activeBuildingType = type;
 
         if (this.previewBuilding) {
-            this.scene.remove(this.previewBuilding);
+            this.placementGroup.remove(this.previewBuilding);
             this.previewBuilding = null;
         }
 
         if (type) {
             this.previewBuilding = new Building(type);
             this.setPreviewMaterial(this.previewBuilding, 0x00ff00);
-            this.scene.add(this.previewBuilding);
+            this.placementGroup.add(this.previewBuilding);
         }
     }
 
@@ -62,19 +59,35 @@ export class BuildingManager {
         this.mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
         this.mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
 
+        if (this.tileHighlight.parent !== this.placementGroup) {
+            this.placementGroup.add(this.tileHighlight);
+        }
+
         const intersect = this.getTerrainIntersect();
         if (intersect) {
             const faceInfo = this.terrain.getFaceInfo(intersect);
             if (faceInfo) {
-                const { center, normal, id, vA, vB, vC } = faceInfo;
+                const { center, id, vA, vB, vC } = faceInfo;
 
-                this.tileHighlight.updateTriangle(vA, vB, vC);
+                const localVA = vA.clone();
+                const localVB = vB.clone();
+                const localVC = vC.clone();
+                this.placementGroup.worldToLocal(localVA);
+                this.placementGroup.worldToLocal(localVB);
+                this.placementGroup.worldToLocal(localVC);
+
+                this.tileHighlight.updateTriangle(localVA, localVB, localVC);
                 this.tileHighlight.setVisible(true);
 
                 if (this.previewBuilding) {
+                    const localCenter = center.clone();
+                    this.placementGroup.worldToLocal(localCenter);
+                    
+                    const localNormal = localCenter.clone().normalize();
                     const isOccupied = this.occupiedTiles.has(id);
-                    this.previewBuilding.position.copy(center);
-                    this.previewBuilding.alignToNormal(normal);
+                    
+                    this.previewBuilding.position.copy(localCenter);
+                    this.previewBuilding.alignToNormal(localNormal);
                     this.previewBuilding.visible = true;
                     this.setPreviewMaterial(this.previewBuilding, isOccupied ? 0xff0000 : 0x00ff00);
                 }
@@ -106,13 +119,8 @@ export class BuildingManager {
 
     private placeBuilding(type: BuildingType, faceInfo: any) {
         const building = new Building(type);
-        
-        // Find local position relative to the asteroid group
         const localPos = faceInfo.center.clone();
         this.placementGroup.worldToLocal(localPos);
-        
-        // Find local normal
-        // Since it's a sphere at origin, we can just use localPos normalized
         const localNormal = localPos.clone().normalize();
 
         building.position.copy(localPos);
@@ -127,5 +135,19 @@ export class BuildingManager {
         return this.buildings;
     }
 
-    public update() {}
+    public update() {
+        if (this.lastMouseScreenX !== -1) {
+            const fakeEvent = { clientX: this.lastMouseScreenX, clientY: this.lastMouseScreenY } as MouseEvent;
+            this.onMouseMove(fakeEvent);
+        }
+    }
+
+    public initEvents() {
+        window.addEventListener('mousemove', (e) => {
+            this.lastMouseScreenX = e.clientX;
+            this.lastMouseScreenY = e.clientY;
+            this.onMouseMove(e);
+        });
+        window.addEventListener('mousedown', (e) => this.onMouseDown(e));
+    }
 }
