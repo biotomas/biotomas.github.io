@@ -39,7 +39,7 @@ export class Game {
         this.scene.add(this.skybox);
 
         // Terrain
-        this.terrain = new Terrain(50, 50);
+        this.terrain = new Terrain();
         this.scene.add(this.terrain);
 
         // Building Manager

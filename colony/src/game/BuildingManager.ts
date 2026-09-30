@@ -38,7 +38,7 @@ export class BuildingManager {
 
         if (type) {
             this.previewBuilding = new Building(type);
-            this.setPreviewMaterial(this.previewBuilding, 0x00ff00); // Default green ghost
+            this.setPreviewMaterial(this.previewBuilding, 0x00ff00);
             this.scene.add(this.previewBuilding);
         }
     }
@@ -61,24 +61,28 @@ export class BuildingManager {
 
         const intersect = this.getTerrainIntersect();
         if (intersect) {
-            const ix = Math.floor(intersect.point.x);
-            const iz = Math.floor(intersect.point.z);
-            const height = this.terrain.getHeightAt(ix, iz);
+            const normal = intersect.point.clone().normalize();
+            const pos = this.terrain.getSurfacePoint(normal);
 
-            this.tileHighlight.updatePosition(ix, height, iz);
+            // Simple lat/long snap for highlights
+            const lat = Math.round(Math.asin(normal.y) * 10) / 10;
+            const lon = Math.round(Math.atan2(normal.x, normal.z) * 10) / 10;
+            const tileKey = `${lat.toFixed(1)},${lon.toFixed(1)}`;
+
+            this.tileHighlight.updatePosition(pos.x, pos.y, pos.z);
+            this.tileHighlight.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
             this.tileHighlight.setVisible(true);
 
             if (this.previewBuilding) {
-                const isOccupied = this.occupiedTiles.has(`${ix},${iz}`);
-                this.previewBuilding.position.set(ix + 0.5, height, iz + 0.5);
+                const isOccupied = this.occupiedTiles.has(tileKey);
+                this.previewBuilding.position.copy(pos);
+                this.previewBuilding.alignToNormal(normal);
                 this.previewBuilding.visible = true;
                 this.setPreviewMaterial(this.previewBuilding, isOccupied ? 0xff0000 : 0x00ff00);
             }
         } else {
             this.tileHighlight.setVisible(false);
-            if (this.previewBuilding) {
-                this.previewBuilding.visible = false;
-            }
+            if (this.previewBuilding) this.previewBuilding.visible = false;
         }
     }
 
@@ -88,42 +92,31 @@ export class BuildingManager {
 
         const intersect = this.getTerrainIntersect();
         if (intersect) {
-            const ix = Math.floor(intersect.point.x);
-            const iz = Math.floor(intersect.point.z);
+            const normal = intersect.point.clone().normalize();
+            const lat = Math.round(Math.asin(normal.y) * 10) / 10;
+            const lon = Math.round(Math.atan2(normal.x, normal.z) * 10) / 10;
+            const tileKey = `${lat.toFixed(1)},${lon.toFixed(1)}`;
             
-            if (!this.occupiedTiles.has(`${ix},${iz}`)) {
-                this.placeBuilding(this.activeBuildingType, ix, iz);
+            if (!this.occupiedTiles.has(tileKey)) {
+                this.placeBuilding(this.activeBuildingType, normal, tileKey);
             }
         }
     }
 
-    private groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-
     private getTerrainIntersect() {
         this.raycaster.setFromCamera(this.mouse, this.camera);
-        
-        // Try mesh raycasting first
         const intersects = this.raycaster.intersectObject(this.terrain.getMesh());
-        if (intersects.length > 0) {
-            return intersects[0];
-        }
-
-        // Fallback: Plane intersection for when the mouse is slightly off the mesh 
-        // but still over the intended grid area
-        const intersectPoint = new THREE.Vector3();
-        if (this.raycaster.ray.intersectPlane(this.groundPlane, intersectPoint)) {
-            return { point: intersectPoint };
-        }
-
-        return null;
+        return intersects.length > 0 ? intersects[0] : null;
     }
 
-    private placeBuilding(type: BuildingType, ix: number, iz: number) {
+    private placeBuilding(type: BuildingType, normal: THREE.Vector3, tileKey: string) {
         const building = new Building(type);
-        building.position.set(ix + 0.5, this.terrain.getHeightAt(ix, iz), iz + 0.5);
+        const pos = this.terrain.getSurfacePoint(normal);
+        building.position.copy(pos);
+        building.alignToNormal(normal);
         this.scene.add(building);
         this.buildings.push(building);
-        this.occupiedTiles.add(`${ix},${iz}`);
+        this.occupiedTiles.add(tileKey);
     }
 
     public getBuildings(): Building[] {

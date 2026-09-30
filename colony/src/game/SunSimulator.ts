@@ -2,30 +2,49 @@ import * as THREE from 'three';
 
 export class SunSimulator {
     private sunLight: THREE.DirectionalLight;
+    private pointLight: THREE.PointLight;
     private ambientLight: THREE.AmbientLight;
-    private dayDuration: number = 60000; // 60 seconds for 24h
+    private sunGroup: THREE.Group;
+    private dayDuration: number = 60000;
     private startTime: number;
 
-    // Rise at 5:00 (5/24 = 0.208), Set at 22:00 (22/24 = 0.916)
-    // We achieve this by remapping the day progress to an angle that spends more time "above" the horizon.
     private readonly sunriseProgress = 5 / 24;
     private readonly sunsetProgress = 22 / 24;
 
     constructor(scene: THREE.Scene) {
+        this.sunGroup = new THREE.Group();
+        scene.add(this.sunGroup);
+
         this.sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
         this.sunLight.castShadow = true;
         
-        // Target the center of the 50x50 map
-        this.sunLight.target.position.set(25, 0, 25);
+        // Target origin for the planet
+        this.sunLight.target.position.set(0, 0, 0);
         scene.add(this.sunLight.target);
 
         // Visual Sun
         const sunGeo = new THREE.SphereGeometry(4, 32, 32);
         const sunMat = new THREE.MeshBasicMaterial({ color: 0xffffee });
         const sunMesh = new THREE.Mesh(sunGeo, sunMat);
-        this.sunLight.add(sunMesh);
+        this.sunGroup.add(sunMesh);
 
-        // Configure Shadow Camera to cover the 50x50 map
+        // Glow effect
+        const glowGeo = new THREE.SphereGeometry(8, 32, 32);
+        const glowMat = new THREE.MeshBasicMaterial({
+            color: 0xffccaa,
+            transparent: true,
+            opacity: 0.3,
+            blending: THREE.AdditiveBlending,
+            side: THREE.FrontSide
+        });
+        const glowMesh = new THREE.Mesh(glowGeo, glowMat);
+        this.sunGroup.add(glowMesh);
+
+        // Point light for close-up glow
+        this.pointLight = new THREE.PointLight(0xffaa66, 1.0, 500);
+        this.sunGroup.add(this.pointLight);
+
+        // Configure Shadow Camera for Sphere
         this.sunLight.shadow.mapSize.width = 2048;
         this.sunLight.shadow.mapSize.height = 2048;
         this.sunLight.shadow.camera.near = 0.5;
@@ -38,7 +57,7 @@ export class SunSimulator {
 
         scene.add(this.sunLight);
 
-        this.ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
+        this.ambientLight = new THREE.AmbientLight(0xffffff, 0.1);
         scene.add(this.ambientLight);
 
         this.startTime = Date.now();
@@ -48,22 +67,14 @@ export class SunSimulator {
         return ((Date.now() - this.startTime) % this.dayDuration) / this.dayDuration;
     }
 
-    /**
-     * Maps the 0-1 day progress to a sun angle.
-     * We want angle 0 at sunriseProgress and angle PI at sunsetProgress.
-     */
     private getSunAngle(): number {
         const progress = this.getDayProgress();
-        
-        // Linear interpolation for simpler day/night arc
         const dayLength = this.sunsetProgress - this.sunriseProgress;
         
         if (progress >= this.sunriseProgress && progress <= this.sunsetProgress) {
-            // It's day. Map sunrise...sunset to 0...PI
             const dayProgress = (progress - this.sunriseProgress) / dayLength;
             return dayProgress * Math.PI;
         } else {
-            // It's night. Map sunset...sunrise to PI...2PI
             const nightLength = 1.0 - dayLength;
             const nightProgress = progress < this.sunriseProgress 
                 ? (progress + (1.0 - this.sunsetProgress)) / nightLength
@@ -74,32 +85,30 @@ export class SunSimulator {
 
     public update() {
         const angle = this.getSunAngle();
+        const radius = 150; // Increased radius for planet scale
 
-        const radius = 100;
-        // Orbit around the center of the map (25, 0, 25)
-        const x = 25 + Math.cos(angle + Math.PI) * radius;
+        const x = Math.cos(angle + Math.PI) * radius;
         const y = Math.sin(angle) * radius; 
-        const z = 25; 
+        const z = 0;
 
         this.sunLight.position.set(x, y, z);
+        this.sunGroup.position.set(x, y, z);
         
-        // Intensity: Max at noon, 0 during night
-        this.sunLight.intensity = Math.max(0, Math.sin(angle)) * 1.5;
-        this.ambientLight.intensity = 0.1 + Math.max(0, Math.sin(angle)) * 0.3;
+        const intensity = Math.max(0, Math.sin(angle));
+        this.sunLight.intensity = intensity * 1.5;
+        this.pointLight.intensity = intensity * 2.0;
+        this.ambientLight.intensity = 0.05 + intensity * 0.2;
     }
 
     public getSunIntensity(): number {
-        const angle = this.getSunAngle();
-        return Math.max(0, Math.sin(angle));
+        return Math.max(0, Math.sin(this.getSunAngle()));
     }
 
     public getFormattedTime(): string {
         const progress = this.getDayProgress();
         const totalMinutes = progress * 24 * 60;
-        
         const hours = Math.floor(totalMinutes / 60);
         const mins = Math.floor(totalMinutes % 60);
-        
         return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
     }
 }

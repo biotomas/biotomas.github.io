@@ -23,7 +23,6 @@ export class Building extends THREE.Group {
     }
 
     private createBatteryModel() {
-        // Battery body
         const bodyGeo = new THREE.BoxGeometry(0.6, 0.8, 0.6);
         const bodyMat = new THREE.MeshPhongMaterial({ color: 0x3366ff });
         const body = new THREE.Mesh(bodyGeo, bodyMat);
@@ -32,7 +31,6 @@ export class Building extends THREE.Group {
         body.receiveShadow = true;
         this.add(body);
 
-        // Terminals
         const termGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
         const termMat = new THREE.MeshPhongMaterial({ color: 0xcccccc });
         
@@ -50,7 +48,6 @@ export class Building extends THREE.Group {
     }
 
     private createSolarPanelModel() {
-        // Base/Stand
         const standGeo = new THREE.CylinderGeometry(0.05, 0.1, 0.3);
         const standMat = new THREE.MeshPhongMaterial({ color: 0x666666 });
         const stand = new THREE.Mesh(standGeo, standMat);
@@ -59,14 +56,17 @@ export class Building extends THREE.Group {
         stand.receiveShadow = true;
         this.add(stand);
 
-        // Panel
         const panelGeo = new THREE.BoxGeometry(0.8, 0.05, 0.6);
         const panelMat = new THREE.MeshPhongMaterial({ color: 0x112244, specular: 0x555555 });
         const panel = new THREE.Mesh(panelGeo, panelMat);
         panel.position.y = 0.4;
-        panel.rotation.x = Math.PI / 6; // Angled towards "sun"
+        panel.rotation.x = Math.PI / 6;
         panel.castShadow = true;
         panel.receiveShadow = true;
         this.add(panel);
+    }
+
+    public alignToNormal(normal: THREE.Vector3) {
+        this.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
     }
 }
