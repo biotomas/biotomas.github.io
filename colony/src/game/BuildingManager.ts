@@ -129,7 +129,7 @@ export class BuildingManager {
     private placeBuilding(type: BuildingType, localNormal: THREE.Vector3, tileKey: string) {
         const building = new Building(type);
         // Position relative to the placement group (asteroid)
-        const localSurfacePos = localNormal.clone().multiplyScalar(this.terrain.getRadiusAt());
+        const localSurfacePos = localNormal.clone().multiplyScalar(this.terrain.getRadiusAt(localNormal));
         building.position.copy(localSurfacePos);
         building.alignToNormal(localNormal);
         
