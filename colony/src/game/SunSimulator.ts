@@ -19,6 +19,12 @@ export class SunSimulator {
         this.sunLight.target.position.set(25, 0, 25);
         scene.add(this.sunLight.target);
 
+        // Visual Sun
+        const sunGeo = new THREE.SphereGeometry(4, 32, 32);
+        const sunMat = new THREE.MeshBasicMaterial({ color: 0xffffee });
+        const sunMesh = new THREE.Mesh(sunGeo, sunMat);
+        this.sunLight.add(sunMesh);
+
         // Configure Shadow Camera to cover the 50x50 map
         this.sunLight.shadow.mapSize.width = 2048;
         this.sunLight.shadow.mapSize.height = 2048;
@@ -38,7 +44,7 @@ export class SunSimulator {
         this.startTime = Date.now();
     }
 
-    private getDayProgress(): number {
+    public getDayProgress(): number {
         return ((Date.now() - this.startTime) % this.dayDuration) / this.dayDuration;
     }
 

@@ -10,6 +10,9 @@ export class Skybox extends THREE.Group {
     constructor(sunSimulator: SunSimulator) {
         super();
         this.sunSimulator = sunSimulator;
+        
+        // Center the skybox on the map center
+        this.position.set(25, 0, 25);
 
         // 1. Sky Sphere
         const skyGeo = new THREE.SphereGeometry(400, 32, 32);
@@ -46,11 +49,14 @@ export class Skybox extends THREE.Group {
 
     public update() {
         const intensity = this.sunSimulator.getSunIntensity();
+        const progress = this.sunSimulator.getDayProgress();
         
+        // Rotate stars to match asteroid rotation relative to space
+        // We use the same angle math as SunSimulator for consistency
+        // DayProgress 0..1 maps to 0..2PI
+        this.stars.rotation.z = -(progress * Math.PI * 2);
+
         // Smoother Sky Color Transition
-        // For an asteroid (no atmosphere), the sky should mostly stay dark, 
-        // but we'll add a subtle color shift when facing the sun.
-        
         const nightColor = new THREE.Color(0x010103);
         const sunsetColor = new THREE.Color(0x221133); // Dark purple twilight
         const dayColor = new THREE.Color(0x050510);    // Deep space blue even in day
