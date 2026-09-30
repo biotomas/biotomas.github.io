@@ -21,7 +21,9 @@ export class Terrain extends THREE.Group {
 
         const material = new THREE.MeshPhongMaterial({
             flatShading: true,
-            vertexColors: true, // Enable vertex colors for "dust"
+            vertexColors: true,
+            map: this.createRockyTexture(), // Apply procedural texture
+            shininess: 10,
         });
 
         this.mesh = new THREE.Mesh(geometry, material);
@@ -33,6 +35,46 @@ export class Terrain extends THREE.Group {
             new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.03 })
         );
         this.add(wireframe);
+    }
+
+    private createRockyTexture(): THREE.CanvasTexture {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 512;
+        const ctx = canvas.getContext('2d')!;
+
+        // Fill with base gray
+        ctx.fillStyle = '#888888';
+        ctx.fillRect(0, 0, 512, 512);
+
+        // Add fine noise (grain)
+        for (let i = 0; i < 20000; i++) {
+            const x = Math.random() * 512;
+            const y = Math.random() * 512;
+            const gray = Math.floor(Math.random() * 60) + 100;
+            ctx.fillStyle = `rgb(${gray},${gray},${gray})`;
+            ctx.fillRect(x, y, 1, 1);
+        }
+
+        // Add some "dusty" artifacts
+        for (let i = 0; i < 500; i++) {
+            const x = Math.random() * 512;
+            const y = Math.random() * 512;
+            const radius = Math.random() * 3 + 1;
+            const gray = Math.floor(Math.random() * 40) + 140;
+            ctx.fillStyle = `rgba(${gray},${gray},${gray}, 0.3)`;
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        // Tile the texture several times across the sphere for high detail
+        texture.repeat.set(16, 8); 
+        
+        return texture;
     }
 
     private generateCraters() {
