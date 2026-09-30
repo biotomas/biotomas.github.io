@@ -43,26 +43,26 @@ export class Terrain extends THREE.Group {
         canvas.height = 512;
         const ctx = canvas.getContext('2d')!;
 
-        // Fill with base gray
-        ctx.fillStyle = '#888888';
+        // Fill with a darker base for more contrast
+        ctx.fillStyle = '#666666';
         ctx.fillRect(0, 0, 512, 512);
 
-        // Add fine noise (grain)
-        for (let i = 0; i < 20000; i++) {
+        // Add fine noise (grain) - more density and wider range
+        for (let i = 0; i < 40000; i++) {
             const x = Math.random() * 512;
             const y = Math.random() * 512;
-            const gray = Math.floor(Math.random() * 60) + 100;
+            const gray = Math.floor(Math.random() * 150); // Deep shadows and highlights
             ctx.fillStyle = `rgb(${gray},${gray},${gray})`;
             ctx.fillRect(x, y, 1, 1);
         }
 
-        // Add some "dusty" artifacts
-        for (let i = 0; i < 500; i++) {
+        // Add more intense "dusty" artifacts
+        for (let i = 0; i < 800; i++) {
             const x = Math.random() * 512;
             const y = Math.random() * 512;
-            const radius = Math.random() * 3 + 1;
-            const gray = Math.floor(Math.random() * 40) + 140;
-            ctx.fillStyle = `rgba(${gray},${gray},${gray}, 0.3)`;
+            const radius = Math.random() * 4 + 1;
+            const gray = Math.floor(Math.random() * 100) + 155; // Brighter dust
+            ctx.fillStyle = `rgba(${gray},${gray},${gray}, 0.5)`; // Increased opacity
             ctx.beginPath();
             ctx.arc(x, y, radius, 0, Math.PI * 2);
             ctx.fill();
@@ -71,7 +71,6 @@ export class Terrain extends THREE.Group {
         const texture = new THREE.CanvasTexture(canvas);
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
-        // Tile the texture several times across the sphere for high detail
         texture.repeat.set(16, 8); 
         
         return texture;
