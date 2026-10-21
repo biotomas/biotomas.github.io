@@ -76,7 +76,7 @@ export class SolitaireGame {
       this.score = parsed.score;
       this.timer = parsed.timer;
       this.gameWon = parsed.gameWon;
-      this.saveState();
+      this.history = [];
       return true;
     } catch (e) {
       console.error('Failed to load game state', e);
@@ -117,7 +117,6 @@ export class SolitaireGame {
       }
     }
 
-    this.saveState();
     this.saveToLocalStorage();
   }
 
@@ -133,18 +132,20 @@ export class SolitaireGame {
     this.history.push(state);
   }
 
-  public undo(): boolean {
-    if (this.history.length <= 1) return false;
-    this.history.pop(); // remove current state
-    const previousState = this.history[this.history.length - 1];
-    
-    this.tableau = previousState.tableau.map(pile => pile.map(c => Object.assign(new Card(c.suit, c.rank, c.faceUp), c)));
-    this.foundations = previousState.foundations.map(pile => pile.map(c => Object.assign(new Card(c.suit, c.rank, c.faceUp), c)));
-    this.stock = previousState.stock.map(c => Object.assign(new Card(c.suit, c.rank, c.faceUp), c));
-    this.waste = previousState.waste.map(c => Object.assign(new Card(c.suit, c.rank, c.faceUp), c));
-    this.moves = previousState.moves;
-    this.score = previousState.score;
+  private applyState(state: GameState): void {
+    this.tableau = state.tableau.map(pile => pile.map(c => Object.assign(new Card(c.suit, c.rank, c.faceUp), c)));
+    this.foundations = state.foundations.map(pile => pile.map(c => Object.assign(new Card(c.suit, c.rank, c.faceUp), c)));
+    this.stock = state.stock.map(c => Object.assign(new Card(c.suit, c.rank, c.faceUp), c));
+    this.waste = state.waste.map(c => Object.assign(new Card(c.suit, c.rank, c.faceUp), c));
+    this.moves = state.moves;
+    this.score = state.score;
     this.gameWon = false;
+  }
+
+  public undo(): boolean {
+    if (this.history.length === 0) return false;
+    const previousState = this.history.pop()!;
+    this.applyState(previousState);
     this.saveToLocalStorage();
     return true;
   }

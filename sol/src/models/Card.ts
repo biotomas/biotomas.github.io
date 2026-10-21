@@ -35,4 +35,16 @@ export class Card {
       case 'spades': return '♠';
     }
   }
+
+  get imagePath(): string {
+    let rankStr: string;
+    switch (this.rank) {
+      case 1: rankStr = 'ace'; break;
+      case 11: rankStr = 'jack'; break;
+      case 12: rankStr = 'queen'; break;
+      case 13: rankStr = 'king'; break;
+      default: rankStr = this.rank.toString(); break;
+    }
+    return `./cards/${rankStr}_of_${this.suit}.svg`;
+  }
 }

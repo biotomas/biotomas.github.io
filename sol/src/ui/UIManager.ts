@@ -5,7 +5,6 @@ export class UIManager {
   private game: SolitaireGame;
   private container: HTMLElement;
   private selectedSelection: { type: 'waste' | 'tableau' | 'foundation'; pileIndex: number; cardIndex?: number } | null = null;
-  private draggedData: { type: 'waste' | 'tableau' | 'foundation'; pileIndex: number; cardIndex?: number } | null = null;
 
   constructor(container: HTMLElement, game: SolitaireGame) {
     this.container = container;
@@ -15,7 +14,6 @@ export class UIManager {
 
   private init(): void {
     this.render();
-    this.game.startTimer(() => this.updateStats());
   }
 
   public render(): void {
@@ -25,7 +23,6 @@ export class UIManager {
         <div class="stats">
           <div class="stat-item">Moves: <span id="moves-val">${this.game.moves}</span></div>
           <div class="stat-item">Score: <span id="score-val">${this.game.score}</span></div>
-          <div class="stat-item">Time: <span id="time-val">${this.formatTime(this.game.timer)}</span></div>
         </div>
         <div class="controls">
           <button id="undo-btn">Undo</button>
@@ -56,7 +53,7 @@ export class UIManager {
         <div class="modal-overlay">
           <div class="modal">
             <h2>You Won! 🎉</h2>
-            <p>Congratulations! You solved the game in ${this.game.moves} moves and ${this.formatTime(this.game.timer)} with a score of ${this.game.score}.</p>
+            <p>Congratulations! You solved the game in ${this.game.moves} moves with a score of ${this.game.score}.</p>
             <button id="modal-new-game-btn">Play Again</button>
           </div>
         </div>
@@ -66,21 +63,6 @@ export class UIManager {
     this.attachEventListeners();
     this.populateBoard();
     this.updateSelectionUI();
-  }
-
-  private updateStats(): void {
-    const movesEl = document.getElementById('moves-val');
-    const scoreEl = document.getElementById('score-val');
-    const timeEl = document.getElementById('time-val');
-    if (movesEl) movesEl.textContent = this.game.moves.toString();
-    if (scoreEl) scoreEl.textContent = this.game.score.toString();
-    if (timeEl) timeEl.textContent = this.formatTime(this.game.timer);
-  }
-
-  private formatTime(seconds: number): string {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   }
 
   private updateSelectionUI(): void {
@@ -224,33 +206,9 @@ export class UIManager {
       this.render();
     });
 
-    // Foundation drop targets
+    // Foundation click targets
     document.querySelectorAll('.foundation-pile').forEach(el => {
       const index = parseInt(el.getAttribute('data-index')!);
-      
-      el.addEventListener('dragover', (e) => e.preventDefault());
-
-      el.addEventListener('drop', (e) => {
-        e.preventDefault();
-        if (!this.draggedData) return;
-
-        let moved = false;
-        if (this.draggedData.type === 'waste') {
-          moved = this.game.moveWasteToFoundation(index);
-        } else if (this.draggedData.type === 'tableau' && this.draggedData.cardIndex !== undefined) {
-          const pile = this.game.tableau[this.draggedData.pileIndex];
-          if (this.draggedData.cardIndex === pile.length - 1) {
-            moved = this.game.moveTableauToFoundation(this.draggedData.pileIndex, index);
-          }
-        }
-
-        this.draggedData = null;
-        this.selectedSelection = null;
-        if (moved) {
-          this.render();
-        }
-      });
-
       el.addEventListener('click', () => {
         if (this.selectedSelection) {
           if (this.selectedSelection.type === 'waste') {
@@ -275,37 +233,153 @@ export class UIManager {
       });
     });
 
-    // Tableau drop targets
+    // Tableau click targets for empty piles
     document.querySelectorAll('.tableau-pile').forEach(el => {
       const index = parseInt(el.getAttribute('data-index')!);
-
-      el.addEventListener('dragover', (e) => e.preventDefault());
-
-      el.addEventListener('drop', (e) => {
-        e.preventDefault();
-        if (!this.draggedData) return;
-
-        let moved = false;
-        if (this.draggedData.type === 'waste') {
-          moved = this.game.moveWasteToTableau(index);
-        } else if (this.draggedData.type === 'tableau' && this.draggedData.cardIndex !== undefined) {
-          moved = this.game.moveTableauToTableau(this.draggedData.pileIndex, this.draggedData.cardIndex, index);
-        } else if (this.draggedData.type === 'foundation') {
-          moved = this.game.moveFoundationToTableau(this.draggedData.pileIndex, index);
-        }
-
-        this.draggedData = null;
-        this.selectedSelection = null;
-        if (moved) {
-          this.render();
-        }
-      });
-
       el.addEventListener('click', (e) => {
         if (e.target === el && this.selectedSelection) {
           this.executeMove(index);
         }
       });
+    });
+  }
+
+  private getDropTarget(x: number, y: number): { type: 'foundation' | 'tableau'; index: number } | null {
+    const el = document.elementFromPoint(x, y);
+    if (!el) return null;
+    const foundation = el.closest('.foundation-pile') as HTMLElement | null;
+    if (foundation) {
+      const idx = parseInt(foundation.getAttribute('data-index') || '-1');
+      if (idx >= 0) return { type: 'foundation', index: idx };
+    }
+    const tableau = el.closest('.tableau-pile') as HTMLElement | null;
+    if (tableau) {
+      const idx = parseInt(tableau.getAttribute('data-index') || '-1');
+      if (idx >= 0) return { type: 'tableau', index: idx };
+    }
+    return null;
+  }
+
+  private setupPointerDrag(cardEl: HTMLElement, info: { type: 'waste' | 'tableau' | 'foundation'; pileIndex: number; cardIndex?: number }): void {
+    let startX = 0;
+    let startY = 0;
+    let isDragging = false;
+    let elementsToMove: HTMLElement[] = [];
+
+    cardEl.addEventListener('pointerdown', (e: PointerEvent) => {
+      if (e.button !== 0) return; // Left mouse button only
+
+      startX = e.clientX;
+      startY = e.clientY;
+      isDragging = false;
+
+      // Determine which cards are moving (for tableau, card and all cards below it)
+      if (info.type === 'tableau' && info.cardIndex !== undefined) {
+        const tableauPile = document.querySelector(`.tableau-pile[data-index="${info.pileIndex}"]`);
+        if (tableauPile) {
+          const cards = Array.from(tableauPile.querySelectorAll('.card')) as HTMLElement[];
+          elementsToMove = cards.slice(info.cardIndex);
+        } else {
+          elementsToMove = [cardEl];
+        }
+      } else {
+        elementsToMove = [cardEl];
+      }
+
+      cardEl.setPointerCapture(e.pointerId);
+
+      const onPointerMove = (moveEv: PointerEvent) => {
+        const dx = moveEv.clientX - startX;
+        const dy = moveEv.clientY - startY;
+
+        if (!isDragging && (Math.hypot(dx, dy) > 5)) {
+          isDragging = true;
+          elementsToMove.forEach((el, i) => {
+            el.style.zIndex = `${1000 + i}`;
+            el.style.pointerEvents = 'none';
+          });
+        }
+
+        if (isDragging) {
+          elementsToMove.forEach(el => {
+            el.style.transform = `translate(${dx}px, ${dy}px)`;
+          });
+        }
+      };
+
+      const onPointerUp = (upEv: PointerEvent) => {
+        cardEl.removeEventListener('pointermove', onPointerMove);
+        cardEl.removeEventListener('pointerup', onPointerUp);
+        cardEl.removeEventListener('pointercancel', onPointerUp);
+        try {
+          cardEl.releasePointerCapture(upEv.pointerId);
+        } catch {
+          // ignore
+        }
+
+        if (isDragging) {
+          const dx = upEv.clientX - startX;
+          const dy = upEv.clientY - startY;
+
+          // Temporarily keep pointerEvents none to inspect drop target below
+          elementsToMove.forEach(el => { el.style.pointerEvents = 'none'; });
+          const target = this.getDropTarget(upEv.clientX, upEv.clientY);
+          elementsToMove.forEach(el => { el.style.pointerEvents = ''; });
+
+          let moved = false;
+          if (target) {
+            if (target.type === 'foundation') {
+              if (info.type === 'waste') {
+                moved = this.game.moveWasteToFoundation(target.index);
+              } else if (info.type === 'tableau' && info.cardIndex !== undefined) {
+                if (info.cardIndex === this.game.tableau[info.pileIndex].length - 1) {
+                  moved = this.game.moveTableauToFoundation(info.pileIndex, target.index);
+                }
+              }
+            } else if (target.type === 'tableau') {
+              if (info.type === 'waste') {
+                moved = this.game.moveWasteToTableau(target.index);
+              } else if (info.type === 'tableau' && info.cardIndex !== undefined) {
+                moved = this.game.moveTableauToTableau(info.pileIndex, info.cardIndex, target.index);
+              } else if (info.type === 'foundation') {
+                moved = this.game.moveFoundationToTableau(info.pileIndex, target.index);
+              }
+            }
+          }
+
+          if (moved) {
+            this.selectedSelection = null;
+            this.render();
+          } else {
+            // Animate snap back
+            let completed = 0;
+            elementsToMove.forEach(el => {
+              const anim = el.animate([
+                { transform: `translate(${dx}px, ${dy}px)` },
+                { transform: 'translate(0, 0)' }
+              ], {
+                duration: 160,
+                easing: 'ease-out'
+              });
+              anim.onfinish = () => {
+                el.style.transform = '';
+                el.style.zIndex = '';
+                completed++;
+                if (completed === elementsToMove.length) {
+                  this.updateSelectionUI();
+                }
+              };
+            });
+          }
+        } else {
+          // It was a click, not a drag
+          this.handleCardClick(info);
+        }
+      };
+
+      cardEl.addEventListener('pointermove', onPointerMove);
+      cardEl.addEventListener('pointerup', onPointerUp);
+      cardEl.addEventListener('pointercancel', onPointerUp);
     });
   }
 
@@ -318,8 +392,15 @@ export class UIManager {
 
     const wasteEl = document.getElementById('waste-pile');
     if (wasteEl && this.game.waste.length > 0) {
+      if (this.game.waste.length > 1) {
+        const prevCard = this.game.waste[this.game.waste.length - 2];
+        const prevCardEl = this.createCardElement(prevCard);
+        wasteEl.appendChild(prevCardEl);
+      }
+
       const card = this.game.waste[this.game.waste.length - 1];
       const cardEl = this.createCardElement(card, { type: 'waste', pileIndex: 0 });
+
       cardEl.addEventListener('dblclick', (e) => {
         e.stopPropagation();
         const startRect = cardEl.getBoundingClientRect();
@@ -421,35 +502,13 @@ export class UIManager {
     el.className = `card ${card.faceUp ? card.color : 'face-down'}`;
 
     if (card.faceUp) {
-      el.innerHTML = `
-        <div class="card-top">
-          <span>${card.rankName}</span>
-          <span>${card.suitSymbol}</span>
-        </div>
-        <div class="card-center">${card.suitSymbol}</div>
-        <div class="card-bottom">
-          <span>${card.rankName}</span>
-          <span>${card.suitSymbol}</span>
-        </div>
-      `;
+      el.innerHTML = `<div class="card-face" style="background-image: url('${card.imagePath}');"></div>`;
 
       if (selectionInfo) {
-        el.draggable = true;
-        el.addEventListener('dragstart', () => {
-          this.draggedData = selectionInfo;
-          el.classList.add('dragging');
-        });
-
-        el.addEventListener('dragend', () => {
-          el.classList.remove('dragging');
-          this.draggedData = null;
-        });
-
-        el.addEventListener('click', (e) => {
-          e.stopPropagation();
-          this.handleCardClick(selectionInfo);
-        });
+        this.setupPointerDrag(el, selectionInfo);
       }
+    } else {
+      el.innerHTML = `<div class="card-face" style="background-image: url('./cards/back.svg');"></div>`;
     }
 
     return el;
