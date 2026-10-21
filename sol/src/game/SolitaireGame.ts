@@ -23,9 +23,12 @@ export class SolitaireGame {
   public gameWon: boolean = false;
   private history: GameState[] = [];
   private timerInterval: any = null;
+  private STORAGE_KEY = 'klondike_solitaire_state';
 
   constructor() {
-    this.newGame();
+    if (!this.loadFromLocalStorage()) {
+      this.newGame();
+    }
   }
 
   public startTimer(onTick: () => void): void {
@@ -34,6 +37,7 @@ export class SolitaireGame {
       if (!this.gameWon) {
         this.timer++;
         onTick();
+        this.saveToLocalStorage();
       }
     }, 1000);
   }
@@ -42,6 +46,41 @@ export class SolitaireGame {
     if (this.timerInterval) {
       clearInterval(this.timerInterval);
       this.timerInterval = null;
+    }
+  }
+
+  public saveToLocalStorage(): void {
+    const state = {
+      tableau: this.tableau,
+      foundations: this.foundations,
+      stock: this.stock,
+      waste: this.waste,
+      moves: this.moves,
+      score: this.score,
+      timer: this.timer,
+      gameWon: this.gameWon
+    };
+    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(state));
+  }
+
+  public loadFromLocalStorage(): boolean {
+    const data = localStorage.getItem(this.STORAGE_KEY);
+    if (!data) return false;
+    try {
+      const parsed = JSON.parse(data);
+      this.tableau = parsed.tableau.map((pile: any[]) => pile.map((c: any) => Object.assign(new Card(c.suit, c.rank, c.faceUp), c)));
+      this.foundations = parsed.foundations.map((pile: any[]) => pile.map((c: any) => Object.assign(new Card(c.suit, c.rank, c.faceUp), c)));
+      this.stock = parsed.stock.map((c: any) => Object.assign(new Card(c.suit, c.rank, c.faceUp), c));
+      this.waste = parsed.waste.map((c: any) => Object.assign(new Card(c.suit, c.rank, c.faceUp), c));
+      this.moves = parsed.moves;
+      this.score = parsed.score;
+      this.timer = parsed.timer;
+      this.gameWon = parsed.gameWon;
+      this.saveState();
+      return true;
+    } catch (e) {
+      console.error('Failed to load game state', e);
+      return false;
     }
   }
 
@@ -79,6 +118,7 @@ export class SolitaireGame {
     }
 
     this.saveState();
+    this.saveToLocalStorage();
   }
 
   private saveState(): void {
@@ -105,6 +145,7 @@ export class SolitaireGame {
     this.moves = previousState.moves;
     this.score = previousState.score;
     this.gameWon = false;
+    this.saveToLocalStorage();
     return true;
   }
 
@@ -119,6 +160,7 @@ export class SolitaireGame {
         this.stock.push(card);
       }
       this.moves++;
+      this.saveToLocalStorage();
       return true;
     }
 
@@ -126,6 +168,7 @@ export class SolitaireGame {
     card.faceUp = true;
     this.waste.push(card);
     this.moves++;
+    this.saveToLocalStorage();
     return true;
   }
 
@@ -159,6 +202,7 @@ export class SolitaireGame {
       this.moves++;
       this.score += 10;
       this.checkWin();
+      this.saveToLocalStorage();
       return true;
     }
     return false;
@@ -173,6 +217,7 @@ export class SolitaireGame {
       this.tableau[tableauIndex].push(card);
       this.moves++;
       this.score += 5;
+      this.saveToLocalStorage();
       return true;
     }
     return false;
@@ -195,6 +240,7 @@ export class SolitaireGame {
       this.moves++;
       this.score += 10;
       this.checkWin();
+      this.saveToLocalStorage();
       return true;
     }
     return false;
@@ -217,6 +263,7 @@ export class SolitaireGame {
         this.score += 5; // flipping card bonus
       }
       this.moves++;
+      this.saveToLocalStorage();
       return true;
     }
     return false;
@@ -233,6 +280,7 @@ export class SolitaireGame {
       this.tableau[tableauIndex].push(card);
       this.moves++;
       this.score -= 15;
+      this.saveToLocalStorage();
       return true;
     }
     return false;
@@ -243,6 +291,7 @@ export class SolitaireGame {
     if (totalFoundationCards === 52) {
       this.gameWon = true;
       this.stopTimer();
+      localStorage.removeItem(this.STORAGE_KEY);
     }
   }
 }

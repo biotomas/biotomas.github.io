@@ -5,6 +5,7 @@ export class UIManager {
   private game: SolitaireGame;
   private container: HTMLElement;
   private selectedSelection: { type: 'waste' | 'tableau' | 'foundation'; pileIndex: number; cardIndex?: number } | null = null;
+  private draggedData: { type: 'waste' | 'tableau' | 'foundation'; pileIndex: number; cardIndex?: number } | null = null;
 
   constructor(container: HTMLElement, game: SolitaireGame) {
     this.container = container;
@@ -64,6 +65,7 @@ export class UIManager {
 
     this.attachEventListeners();
     this.populateBoard();
+    this.updateSelectionUI();
   }
 
   private updateStats(): void {
@@ -81,7 +83,123 @@ export class UIManager {
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   }
 
+  private updateSelectionUI(): void {
+    document.querySelectorAll('.card.selected').forEach(el => el.classList.remove('selected'));
+
+    if (!this.selectedSelection) return;
+
+    if (this.selectedSelection.type === 'waste') {
+      const wasteCard = document.querySelector('.waste-pile .card');
+      wasteCard?.classList.add('selected');
+    } else if (this.selectedSelection.type === 'foundation') {
+      const foundationCard = document.querySelector(`.foundation-pile[data-index="${this.selectedSelection.pileIndex}"] .card:last-child`);
+      foundationCard?.classList.add('selected');
+    } else if (this.selectedSelection.type === 'tableau' && this.selectedSelection.cardIndex !== undefined) {
+      const tableauPile = document.querySelector(`.tableau-pile[data-index="${this.selectedSelection.pileIndex}"]`);
+      if (tableauPile) {
+        const cards = tableauPile.querySelectorAll('.card');
+        for (let i = this.selectedSelection.cardIndex; i < cards.length; i++) {
+          cards[i].classList.add('selected');
+        }
+      }
+    }
+  }
+
+  private flipAnimate(startRect: DOMRect, targetSelector: string): void {
+    requestAnimationFrame(() => {
+      const targetEl = document.querySelector(targetSelector) as HTMLElement | null;
+      if (!targetEl) return;
+      const endRect = targetEl.getBoundingClientRect();
+      const dx = startRect.left - endRect.left;
+      const dy = startRect.top - endRect.top;
+
+      targetEl.style.zIndex = '1000';
+      const anim = targetEl.animate([
+        { transform: `translate(${dx}px, ${dy}px)` },
+        { transform: 'translate(0, 0)' }
+      ], {
+        duration: 250,
+        easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)'
+      });
+
+      anim.onfinish = () => {
+        targetEl.style.zIndex = '';
+      };
+    });
+  }
+
+  private autoMoveToFoundationFromCard(type: 'waste' | 'tableau', pileIndex: number, foundationIndex: number): void {
+    let startRect: DOMRect | null = null;
+    if (type === 'waste') {
+      const el = document.querySelector('.waste-pile .card');
+      startRect = el ? el.getBoundingClientRect() : null;
+      this.game.moveWasteToFoundation(foundationIndex);
+    } else {
+      const el = document.querySelector(`.tableau-pile[data-index="${pileIndex}"] .card:last-child`);
+      startRect = el ? el.getBoundingClientRect() : null;
+      this.game.moveTableauToFoundation(pileIndex, foundationIndex);
+    }
+
+    this.selectedSelection = null;
+    this.render();
+    if (startRect) {
+      this.flipAnimate(startRect, `.foundation-pile[data-index="${foundationIndex}"] .card:last-child`);
+    }
+
+    // Cascade next cards automatically
+    setTimeout(() => this.cascadeToFoundations(), 220);
+  }
+
+  private cascadeToFoundations(): void {
+    // 1. Check waste pile
+    if (this.game.waste.length > 0) {
+      const wasteCard = this.game.waste[this.game.waste.length - 1];
+      for (let f = 0; f < 4; f++) {
+        if (this.game.canMoveToFoundation(wasteCard, f)) {
+          const wasteEl = document.querySelector('.waste-pile .card');
+          const startRect = wasteEl ? wasteEl.getBoundingClientRect() : null;
+          this.game.moveWasteToFoundation(f);
+          this.selectedSelection = null;
+          this.render();
+          if (startRect) {
+            this.flipAnimate(startRect, `.foundation-pile[data-index="${f}"] .card:last-child`);
+          }
+          setTimeout(() => this.cascadeToFoundations(), 220);
+          return;
+        }
+      }
+    }
+
+    // 2. Check each tableau pile top card
+    for (let t = 0; t < 7; t++) {
+      const pile = this.game.tableau[t];
+      if (pile.length > 0) {
+        const card = pile[pile.length - 1];
+        if (card.faceUp) {
+          for (let f = 0; f < 4; f++) {
+            if (this.game.canMoveToFoundation(card, f)) {
+              const el = document.querySelector(`.tableau-pile[data-index="${t}"] .card:last-child`);
+              const startRect = el ? el.getBoundingClientRect() : null;
+              this.game.moveTableauToFoundation(t, f);
+              this.selectedSelection = null;
+              this.render();
+              if (startRect) {
+                this.flipAnimate(startRect, `.foundation-pile[data-index="${f}"] .card:last-child`);
+              }
+              setTimeout(() => this.cascadeToFoundations(), 220);
+              return;
+            }
+          }
+        }
+      }
+    }
+  }
+
   private attachEventListeners(): void {
+    this.container.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+    });
+
     document.getElementById('new-game-btn')?.addEventListener('click', () => {
       this.game.newGame();
       this.selectedSelection = null;
@@ -100,16 +218,39 @@ export class UIManager {
       this.render();
     });
 
-    // Stock pile click
     document.getElementById('stock-pile')?.addEventListener('click', () => {
       this.game.drawStock();
       this.selectedSelection = null;
       this.render();
     });
 
-    // Foundation click targets
+    // Foundation drop targets
     document.querySelectorAll('.foundation-pile').forEach(el => {
       const index = parseInt(el.getAttribute('data-index')!);
+      
+      el.addEventListener('dragover', (e) => e.preventDefault());
+
+      el.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (!this.draggedData) return;
+
+        let moved = false;
+        if (this.draggedData.type === 'waste') {
+          moved = this.game.moveWasteToFoundation(index);
+        } else if (this.draggedData.type === 'tableau' && this.draggedData.cardIndex !== undefined) {
+          const pile = this.game.tableau[this.draggedData.pileIndex];
+          if (this.draggedData.cardIndex === pile.length - 1) {
+            moved = this.game.moveTableauToFoundation(this.draggedData.pileIndex, index);
+          }
+        }
+
+        this.draggedData = null;
+        this.selectedSelection = null;
+        if (moved) {
+          this.render();
+        }
+      });
+
       el.addEventListener('click', () => {
         if (this.selectedSelection) {
           if (this.selectedSelection.type === 'waste') {
@@ -119,7 +260,6 @@ export class UIManager {
               return;
             }
           } else if (this.selectedSelection.type === 'tableau' && this.selectedSelection.cardIndex !== undefined) {
-            // Check if it's the top card of the tableau pile
             const pile = this.game.tableau[this.selectedSelection.pileIndex];
             if (this.selectedSelection.cardIndex === pile.length - 1) {
               if (this.game.moveTableauToFoundation(this.selectedSelection.pileIndex, index)) {
@@ -131,15 +271,37 @@ export class UIManager {
           }
         }
         this.selectedSelection = null;
-        this.render();
+        this.updateSelectionUI();
       });
     });
 
-    // Tableau click targets for empty piles or placing cards
+    // Tableau drop targets
     document.querySelectorAll('.tableau-pile').forEach(el => {
       const index = parseInt(el.getAttribute('data-index')!);
+
+      el.addEventListener('dragover', (e) => e.preventDefault());
+
+      el.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (!this.draggedData) return;
+
+        let moved = false;
+        if (this.draggedData.type === 'waste') {
+          moved = this.game.moveWasteToTableau(index);
+        } else if (this.draggedData.type === 'tableau' && this.draggedData.cardIndex !== undefined) {
+          moved = this.game.moveTableauToTableau(this.draggedData.pileIndex, this.draggedData.cardIndex, index);
+        } else if (this.draggedData.type === 'foundation') {
+          moved = this.game.moveFoundationToTableau(this.draggedData.pileIndex, index);
+        }
+
+        this.draggedData = null;
+        this.selectedSelection = null;
+        if (moved) {
+          this.render();
+        }
+      });
+
       el.addEventListener('click', (e) => {
-        // If clicking directly on empty space of tableau pile
         if (e.target === el && this.selectedSelection) {
           this.executeMove(index);
         }
@@ -148,55 +310,72 @@ export class UIManager {
   }
 
   private populateBoard(): void {
-    // Populate Stock
     const stockEl = document.getElementById('stock-pile');
     if (stockEl && this.game.stock.length > 0) {
       const card = this.game.stock[this.game.stock.length - 1];
       stockEl.appendChild(this.createCardElement(card));
     }
 
-    // Populate Waste
     const wasteEl = document.getElementById('waste-pile');
     if (wasteEl && this.game.waste.length > 0) {
       const card = this.game.waste[this.game.waste.length - 1];
       const cardEl = this.createCardElement(card, { type: 'waste', pileIndex: 0 });
-      if (this.selectedSelection?.type === 'waste') {
-        cardEl.classList.add('selected');
-      }
-      cardEl.addEventListener('dblclick', () => {
-        // Try to move to any foundation automatically
+      cardEl.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        const startRect = cardEl.getBoundingClientRect();
         for (let i = 0; i < 4; i++) {
-          if (this.game.moveWasteToFoundation(i)) {
+          if (this.game.canMoveToFoundation(card, i)) {
+            this.game.moveWasteToFoundation(i);
             this.selectedSelection = null;
             this.render();
+            this.flipAnimate(startRect, `.foundation-pile[data-index="${i}"] .card:last-child`);
             return;
           }
         }
       });
+
+      cardEl.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        for (let i = 0; i < 4; i++) {
+          if (this.game.canMoveToFoundation(card, i)) {
+            this.autoMoveToFoundationFromCard('waste', 0, i);
+            return;
+          }
+        }
+      });
+
       wasteEl.appendChild(cardEl);
     }
 
-    // Populate Foundations
     this.game.foundations.forEach((pile, index) => {
       const foundationEl = document.querySelector(`.foundation-pile[data-index="${index}"]`);
       if (foundationEl && pile.length > 0) {
-        const card = pile[pile.length - 1];
-        const cardEl = this.createCardElement(card);
-        cardEl.addEventListener('dblclick', () => {
-          // Try to move back to tableau
+        if (pile.length > 1) {
+          const prevCard = pile[pile.length - 2];
+          const prevCardEl = this.createCardElement(prevCard);
+          foundationEl.appendChild(prevCardEl);
+        }
+
+        const topCard = pile[pile.length - 1];
+        const topCardEl = this.createCardElement(topCard, { type: 'foundation', pileIndex: index });
+        topCardEl.addEventListener('dblclick', (e) => {
+          e.stopPropagation();
+          const startRect = topCardEl.getBoundingClientRect();
           for (let t = 0; t < 7; t++) {
-            if (this.game.moveFoundationToTableau(index, t)) {
+            if (this.game.canMoveToTableau([topCard], t)) {
+              this.game.moveFoundationToTableau(index, t);
               this.selectedSelection = null;
               this.render();
+              this.flipAnimate(startRect, `.tableau-pile[data-index="${t}"] .card:last-child`);
               return;
             }
           }
         });
-        foundationEl.appendChild(cardEl);
+        foundationEl.appendChild(topCardEl);
       }
     });
 
-    // Populate Tableau
     this.game.tableau.forEach((pile, pileIndex) => {
       const tableauEl = document.querySelector(`.tableau-pile[data-index="${pileIndex}"]`);
       if (tableauEl) {
@@ -204,21 +383,27 @@ export class UIManager {
           const cardEl = this.createCardElement(card, { type: 'tableau', pileIndex, cardIndex });
           cardEl.style.top = `${cardIndex * 28}px`;
 
-          if (this.selectedSelection?.type === 'tableau' &&
-              this.selectedSelection.pileIndex === pileIndex &&
-              this.selectedSelection.cardIndex !== undefined &&
-              cardIndex >= this.selectedSelection.cardIndex) {
-            cardEl.classList.add('selected');
-          }
-
-          // Double click top card to move to foundation
           if (card.faceUp && cardIndex === pile.length - 1) {
             cardEl.addEventListener('dblclick', (e) => {
               e.stopPropagation();
+              const startRect = cardEl.getBoundingClientRect();
               for (let f = 0; f < 4; f++) {
-                if (this.game.moveTableauToFoundation(pileIndex, f)) {
+                if (this.game.canMoveToFoundation(card, f)) {
+                  this.game.moveTableauToFoundation(pileIndex, f);
                   this.selectedSelection = null;
                   this.render();
+                  this.flipAnimate(startRect, `.foundation-pile[data-index="${f}"] .card:last-child`);
+                  return;
+                }
+              }
+            });
+
+            cardEl.addEventListener('contextmenu', (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              for (let f = 0; f < 4; f++) {
+                if (this.game.canMoveToFoundation(card, f)) {
+                  this.autoMoveToFoundationFromCard('tableau', pileIndex, f);
                   return;
                 }
               }
@@ -249,6 +434,17 @@ export class UIManager {
       `;
 
       if (selectionInfo) {
+        el.draggable = true;
+        el.addEventListener('dragstart', () => {
+          this.draggedData = selectionInfo;
+          el.classList.add('dragging');
+        });
+
+        el.addEventListener('dragend', () => {
+          el.classList.remove('dragging');
+          this.draggedData = null;
+        });
+
         el.addEventListener('click', (e) => {
           e.stopPropagation();
           this.handleCardClick(selectionInfo);
@@ -261,27 +457,27 @@ export class UIManager {
 
   private handleCardClick(info: { type: 'waste' | 'tableau' | 'foundation'; pileIndex: number; cardIndex?: number }): void {
     if (!this.selectedSelection) {
-      // If clicking a face-down card in tableau, ignore
       if (info.type === 'tableau' && info.cardIndex !== undefined) {
         const card = this.game.tableau[info.pileIndex][info.cardIndex];
         if (!card.faceUp) return;
       }
       this.selectedSelection = info;
-      this.render();
+      this.updateSelectionUI();
     } else {
-      // Already have a selection, attempt move or reselect
+      const startCardEl = document.querySelector(this.getCardSelector(this.selectedSelection));
+      const startRect = startCardEl ? startCardEl.getBoundingClientRect() : null;
+
       if (this.selectedSelection.type === 'tableau' && info.type === 'tableau') {
         if (this.selectedSelection.pileIndex === info.pileIndex && this.selectedSelection.cardIndex === info.cardIndex) {
-          // Deselect
           this.selectedSelection = null;
-          this.render();
+          this.updateSelectionUI();
           return;
         }
-        // Try move tableau to tableau
         if (this.selectedSelection.cardIndex !== undefined) {
           if (this.game.moveTableauToTableau(this.selectedSelection.pileIndex, this.selectedSelection.cardIndex, info.pileIndex)) {
             this.selectedSelection = null;
             this.render();
+            if (startRect) this.flipAnimate(startRect, `.tableau-pile[data-index="${info.pileIndex}"] .card:last-child`);
             return;
           }
         }
@@ -289,37 +485,59 @@ export class UIManager {
         if (this.game.moveWasteToTableau(info.pileIndex)) {
           this.selectedSelection = null;
           this.render();
+          if (startRect) this.flipAnimate(startRect, `.tableau-pile[data-index="${info.pileIndex}"] .card:last-child`);
+          return;
+        }
+      } else if (this.selectedSelection.type === 'foundation' && info.type === 'tableau') {
+        if (this.game.moveFoundationToTableau(this.selectedSelection.pileIndex, info.pileIndex)) {
+          this.selectedSelection = null;
+          this.render();
+          if (startRect) this.flipAnimate(startRect, `.tableau-pile[data-index="${info.pileIndex}"] .card:last-child`);
           return;
         }
       }
 
-      // If move failed or clicked another valid source card, change selection
       if (info.type === 'tableau' && info.cardIndex !== undefined) {
         const card = this.game.tableau[info.pileIndex][info.cardIndex];
         if (card.faceUp) {
           this.selectedSelection = info;
-          this.render();
+          this.updateSelectionUI();
           return;
         }
       }
       this.selectedSelection = null;
-      this.render();
+      this.updateSelectionUI();
     }
   }
 
   private executeMove(targetTableauIndex: number): void {
-    if (!this.selectedSelection) return;
+    if (!this.selectedSelection) {
+      return;
+    }
+    const startCardEl = document.querySelector(this.getCardSelector(this.selectedSelection));
+    const startRect = startCardEl ? startCardEl.getBoundingClientRect() : null;
 
+    let moved = false;
     if (this.selectedSelection.type === 'waste') {
-      if (this.game.moveWasteToTableau(targetTableauIndex)) {
-        this.selectedSelection = null;
-        this.render();
-      }
+      moved = this.game.moveWasteToTableau(targetTableauIndex);
     } else if (this.selectedSelection.type === 'tableau' && this.selectedSelection.cardIndex !== undefined) {
-      if (this.game.moveTableauToTableau(this.selectedSelection.pileIndex, this.selectedSelection.cardIndex, targetTableauIndex)) {
-        this.selectedSelection = null;
-        this.render();
+      moved = this.game.moveTableauToTableau(this.selectedSelection.pileIndex, this.selectedSelection.cardIndex, targetTableauIndex);
+    } else if (this.selectedSelection.type === 'foundation') {
+      moved = this.game.moveFoundationToTableau(this.selectedSelection.pileIndex, targetTableauIndex);
+    }
+
+    if (moved) {
+      this.selectedSelection = null;
+      this.render();
+      if (startRect) {
+        this.flipAnimate(startRect, `.tableau-pile[data-index="${targetTableauIndex}"] .card:last-child`);
       }
     }
+  }
+
+  private getCardSelector(info: { type: 'waste' | 'tableau' | 'foundation'; pileIndex: number; cardIndex?: number }): string {
+    if (info.type === 'waste') return '.waste-pile .card';
+    if (info.type === 'foundation') return `.foundation-pile[data-index="${info.pileIndex}"] .card:last-child`;
+    return `.tableau-pile[data-index="${info.pileIndex}"] .card:nth-child(${(info.cardIndex ?? 0) + 1})`;
   }
 }
